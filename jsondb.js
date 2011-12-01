@@ -54,6 +54,7 @@ function createDB(root) {
     function onePut(data, callback) {
       put(path, data, function (err) {
         callback(err);
+        db.emit("change", path, data);
         var next = lock.shift();
         if (next) {
           onePut(next.data, next.callback);
