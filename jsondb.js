@@ -1,9 +1,11 @@
 var Path = require('path');
 var FS = require('fs');
 var EventEmitter = require('events').EventEmitter;
+var Queue = require('./queue');
 module.exports = createDB;
 
 function createDB(root) {
+
   root = Path.resolve(process.cwd(), root);
   
   // Make sure we have a directory to work with
@@ -19,21 +21,53 @@ function createDB(root) {
       throw err;
     }
   } 
-  if (!stat.isDirectory()) { throw new Error("Path " + root + " is not a directory."); }
+  if (!stat.isDirectory()) {
+    throw new Error("Path " + root + " is not a directory.");
+  }
 
-  var locks = {};
+  var getLock = {};
+  var writeLock = {};
 
   var db = new EventEmitter();
-  db.list = list;
-  db.get = get;
-  db.save = save;
+
+  db.get = function (path, callback) {
+    if (getLock.hasOwnProperty(path)) {
+      getLock[path].push(callback);
+      return;
+    };
+    var queue = getLock[path] = [callback];
+    get(path, function (err, data) {
+      delete getLock[path];
+      for (var i = 0, l = queue.length; i < l; i++) {
+         queue[i](err, data); 
+      }
+    });
+  };
+  
+  db.put = function (path, data, callback) {
+    if (writeLock.hasOwnProperty(path)) {
+      writeLock[path].push({data: data, callback: callback});
+      return;
+    }
+    var lock = writeLock[path] = new Queue();
+    
+    function onePut(data, callback) {
+      put(path, data, function (err) {
+        callback(err);
+        var next = lock.shift();
+        if (next) {
+          onePut(next.data, next.callback);
+        } else {
+          delete writeLock[path];
+        }
+      });
+    }
+    onePut(data, callback);
+  };
+  
   return db;
 
   /////////////////////////////////////////////
-
-//  function lock(path) {
-//    if (locks.hasOwnProperty(path)) 
-//  }
 
   // Lists entries in a folder
   function list(path, callback) {
@@ -55,7 +89,12 @@ function createDB(root) {
   function get(path, callback) {
     var jsonPath = Path.resolve(root, path + ".json");
     FS.readFile(jsonPath, function (err, json) {
-      if (err) return callback(err);
+      if (err) {
+        if (err.code === "ENOENT") {
+          return list(path, callback); 
+        }
+        return callback(err);
+      }
       var data;
       try {
         data = JSON.parse(json);
@@ -76,8 +115,8 @@ function createDB(root) {
     });
   }
   
-  // Save an entry
-  function save(path, data, callback) {
+  // Put an entry
+  function put(path, data, callback) {
     var json;
     if (data.hasOwnProperty("markdown")) {
       Object.defineProperty(data, "markdown", {enumerable: false});
@@ -104,13 +143,83 @@ function createDB(root) {
 ////////////////////////////////////////////////////////////////////////////////
 
 var db = createDB("data");
-console.log("db", db);
-db.list("articles", console.log)
-db.get("articles/myfirst", function (err, article) {
-  if (err) throw err;
-  console.log("article loaded", article);
-  db.save("articles/clone", article, function (err) {
+
+var start = 10000;
+var num = start;
+var before = Date.now();
+console.log("%s serial reads", start);
+getNext();
+function getNext() {
+  db.get("articles/myfirst", function (err, article) {
     if (err) throw err;
-    console.log("article cloned");
+    num--;
+    if (num) {
+      process.nextTick(getNext);
+    } else {
+      console.log(Math.floor(start / (Date.now() - before) * 10000)/10, "per second");
+      two();
+    }
   });
-});
+}
+
+function two() {
+  before = Date.now();
+  var left = start;
+  console.log("%s parallel reads", left);
+  for (var i = 0; i < start; i++) {
+    db.get("articles/myfirst", function (err, article) {
+      if (err) throw err;
+      left--;
+      if (!left) {
+        console.log(Math.floor(start / (Date.now() - before) * 10000)/10, "per second");
+        three();
+      }
+    });
+  }
+}
+
+var article = {"name":"tim", markdown:"This\nis\na\ntest\n."};
+function three() {
+  num = start;
+  before = Date.now();
+  console.log("%s serial writes", start);
+  writeNext();
+  function writeNext() {
+    db.put("articles/test", article, function (err) {
+      if (err) throw err;
+      num--;
+      if (num) {
+        process.nextTick(writeNext);
+      } else {
+        console.log(Math.floor(start / (Date.now() - before) * 10000)/10, "per second");
+        four();
+      }
+    });
+  }
+  
+}
+
+function four() {
+  before = Date.now();
+  var left = start;
+  console.log("%s parallel writes", left);
+  for (var i = 0; i < start; i++) {
+    db.put("articles/myfirst", article, function (err) {
+      if (err) throw err;
+      left--;
+      if (!left) {
+        console.log(Math.floor(start / (Date.now() - before) * 10000)/10, "per second");
+      }
+    });
+  }
+}
+
+// db.get("articles", console.log)
+// db.get("articles/myfirst", function (err, article) {
+//   if (err) throw err;
+//   console.log("article loaded", article);
+//   db.put("articles/clone", article, function (err) {
+//     if (err) throw err;
+//     console.log("article cloned");
+//   });
+// });
