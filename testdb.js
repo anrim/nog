@@ -1,15 +1,17 @@
-var createDB = require('./jsondb');
+var createDB = require('jsondb');
 
-var db = createDB("data");
+var db = createDB("data", ".markdown");
 
+var article;
 var start = 3000;
 var num = start;
 var before = Date.now();
 console.log("%s serial reads", start);
 getNext();
 function getNext() {
-  db.get("articles/myfirst", function (err, article) {
+  db.get("articles/myfirst", function (err, a) {
     if (err) throw err;
+    article = a;
     num--;
     if (num) {
       process.nextTick(getNext);
@@ -36,7 +38,6 @@ function two() {
   }
 }
 
-var article = {"name":"tim", markdown:"This\nis\na\ntest\n."};
 function three() {
   num = start;
   before = Date.now();
