@@ -25,56 +25,123 @@ function createDB(root) {
     throw new Error("Path " + root + " is not a directory.");
   }
 
-  var getLock = {};
-  var writeLock = {};
+  var locks = {};
 
   var db = new EventEmitter();
 
   db.get = function (path, callback) {
-    if (getLock.hasOwnProperty(path)) {
-      getLock[path].push(callback);
+    var queue = locks[path];
+
+    // If a read happens in locked state...
+    if (queue) {
+      var last = queue.last()
+      // ...and last in queue is read batch, add to it
+      if (last.read) {
+//      console.log("Read on locked cell - batched");
+        last.batch.push(callback);
+        return;
+      }
+//      console.log("Read on locked cell");
+      // ...else append a new read batch
+      queue.push({read:true,path:path,batch:[callback]});
       return;
     };
-    var queue = getLock[path] = [callback];
-    get(path, function (err, data) {
-      delete getLock[path];
-      for (var i = 0, l = queue.length; i < l; i++) {
-         queue[i](err, data); 
-      }
-    });
+    
+//    console.log("Read on idle cell");
+    // .. otherwise lock state, create a read batch, and process queue
+    locks[path] = queue = new Queue();
+    queue.push({read:true,path:path,batch:[callback]});
+    processQueue(path);
   };
   
   db.put = function (path, data, callback) {
-    if (writeLock.hasOwnProperty(path)) {
-      writeLock[path].push({data: data, callback: callback});
-      return;
-    }
-    var lock = writeLock[path] = new Queue();
+    var queue = locks[path];
     
-    function onePut(data, callback) {
-      put(path, data, function (err) {
-        callback(err);
-        db.emit("change", path, data);
-        var next = lock.shift();
-        if (next) {
-          onePut(next.data, next.callback);
-        } else {
-          delete writeLock[path];
-        }
-      });
+    var write = {write:true,path:path,data:data,callback:callback};
+    
+    // If write happens in locked state...
+    if (queue) {
+//      console.log("Write on locked cell")
+      queue.push(write); 
+      return
     }
-    onePut(data, callback);
+    
+//    console.log("Write on idle cell")
+    // otherwise lock state, create write transaction and process queue
+    locks[path] = queue = new Queue();
+    queue.push(write); 
+    processQueue(path);
+
   };
   
   return db;
 
   /////////////////////////////////////////////
 
+  function processQueue(path) {
+    var queue = locks[path];
+    var next = queue.first();
+
+    // If queue is empty, put in idle state
+    if (!next) {
+//      console.log("Unlocking " + path);
+      delete locks[path];
+      db.emit("unlock", path);
+
+      return;
+    }
+
+    // If next is read, kick off read
+    if (next.read) {
+//      console.log("Process read " + next.path);
+      get(next.path);
+      return
+    }
+
+    // If next is write, kick off write
+    if (next.write) {
+//      console.log("Process write " + next.path);
+      put(next.path, next.data);
+      return;
+    }
+    
+    throw new Error("Invalid item");
+  }
+  
+  function onReadComplete(path, err, data) {
+//    console.log("Read finished " + path);
+    var queue = locks[path];
+    var read = queue.shift();
+    var batch = read.batch;
+
+    // process queue
+    processQueue(path);
+
+    // When read finishes, get batch from queue and process it.
+    for (var i = 0, l = batch.length; i < l; i++) {
+       batch[i](err, data); 
+    }
+
+  }
+  
+  function onWriteComplete(path, err) {
+//    console.log("Write finished " + path);
+    var queue = locks[path];
+    var write = queue.shift();
+
+    processQueue(path);
+
+    write.callback(err);
+
+    db.emit("change", path, write.data);
+    
+  }
+
   // Lists entries in a folder
-  function list(path, callback) {
+  function list(path) {
     path = Path.resolve(root, path);
     FS.readdir(path, function (err, files) {
-      if (err) return callback(err);
+      if (err) return onReadComplete(path, err);
       var entries = [];
       files.forEach(function (file) {
         var i = file.length - 5;
@@ -82,42 +149,43 @@ function createDB(root) {
           entries.push(file.substr(0, i));
         }
       });
-      callback(null, entries);
+      onReadComplete(path, null, entries);
     });
   }
+
   
   // Load an entry
-  function get(path, callback) {
+  function get(path) {
     var jsonPath = Path.resolve(root, path + ".json");
     FS.readFile(jsonPath, function (err, json) {
       if (err) {
         if (err.code === "ENOENT") {
-          return list(path, callback); 
+          return list(path); 
         }
-        return callback(err);
+        return onReadComplete(path, err);
       }
       var data;
       try {
         data = JSON.parse(json);
       } catch (err) {
-        return callback(new Error("Invalid JSON in " + jsonPath + "\n" + err.message));
+        return onReadComplete(path, new Error("Invalid JSON in " + jsonPath + "\n" + err.message));
       }
       var markdownPath = Path.resolve(root, path + ".markdown");
       FS.readFile(markdownPath, 'utf8', function (err, markdown) {
         if (err) {
           if (err.code !== "ENOENT") {
-            return callback(err);
+            return onReadComplete(path, err);
           }
         } else {
           data.markdown = markdown;
         }
-        callback(null, data);
+        onReadComplete(path, null, data);
       });
     });
   }
   
   // Put an entry
-  function put(path, data, callback) {
+  function put(path, data) {
     var json;
     if (data.hasOwnProperty("markdown")) {
       Object.defineProperty(data, "markdown", {enumerable: false});
@@ -128,99 +196,19 @@ function createDB(root) {
     }
     var jsonPath = Path.resolve(root, path + ".json");
     FS.writeFile(jsonPath, json, function (err) {
-      if (err) return callback(err);
+      if (err) return onWriteComplete(path, err);
       if (data.hasOwnProperty("markdown")) {
         var markdownPath = Path.resolve(root, path + ".markdown");
-        FS.writeFile(markdownPath, data.markdown, callback);
+        FS.writeFile(markdownPath, data.markdown, function (err) {
+          onWriteComplete(path, err);
+        });
         return;
       }
-      callback();
+      onWriteComplete(path);
     });
   }
   
   
 }
 
-////////////////////////////////////////////////////////////////////////////////
 
-var db = createDB("data");
-
-var start = 10000;
-var num = start;
-var before = Date.now();
-console.log("%s serial reads", start);
-getNext();
-function getNext() {
-  db.get("articles/myfirst", function (err, article) {
-    if (err) throw err;
-    num--;
-    if (num) {
-      process.nextTick(getNext);
-    } else {
-      console.log(Math.floor(start / (Date.now() - before) * 10000)/10, "per second");
-      two();
-    }
-  });
-}
-
-function two() {
-  before = Date.now();
-  var left = start;
-  console.log("%s parallel reads", left);
-  for (var i = 0; i < start; i++) {
-    db.get("articles/myfirst", function (err, article) {
-      if (err) throw err;
-      left--;
-      if (!left) {
-        console.log(Math.floor(start / (Date.now() - before) * 10000)/10, "per second");
-        three();
-      }
-    });
-  }
-}
-
-var article = {"name":"tim", markdown:"This\nis\na\ntest\n."};
-function three() {
-  num = start;
-  before = Date.now();
-  console.log("%s serial writes", start);
-  writeNext();
-  function writeNext() {
-    db.put("articles/test", article, function (err) {
-      if (err) throw err;
-      num--;
-      if (num) {
-        process.nextTick(writeNext);
-      } else {
-        console.log(Math.floor(start / (Date.now() - before) * 10000)/10, "per second");
-        four();
-      }
-    });
-  }
-  
-}
-
-function four() {
-  before = Date.now();
-  var left = start;
-  console.log("%s parallel writes", left);
-  for (var i = 0; i < start; i++) {
-    db.put("articles/myfirst", article, function (err) {
-      if (err) throw err;
-      left--;
-      if (!left) {
-        console.log(Math.floor(start / (Date.now() - before) * 10000)/10, "per second");
-      }
-    });
-  }
-}
-
-// db.get("articles", console.log)
-// db.get("articles/myfirst", function (err, article) {
-//   if (err) throw err;
-//   console.log("article loaded", article);
-//   db.put("articles/clone", article, function (err) {
-//     if (err) throw err;
-//     console.log("article cloned");
-//   });
-// });
