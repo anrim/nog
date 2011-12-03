@@ -31,7 +31,6 @@ function compile(name, callback) {
     if (err) return callback(err);
     try {
       var template = Corn(source);
-//      console.log(template.toString());
     } catch (err) {
       return callback(err);
     }
@@ -40,16 +39,28 @@ function compile(name, callback) {
 }
 
 Corn.helpers = {
-  partial: function (callback) {
-//    console.dir({partial:arguments})
-    process.nextTick(function () {
-      callback(null, "*PARTIAL*");
+  partial: function (name, value, callback) {
+    compile(name, function (err, template) {
+      if (err) return callback(err);
+      template(value, callback);
     });
   },
-  loop: function (callback) {
-//    console.dir({loop:arguments});  
-    process.nextTick(function () {
-      callback(null, "*LOOP*");
+  loop: function (name, array, callback) {
+    compile(name, function (err, template) {
+      if (err) return callback(err);
+      if (array.length === 0) return callback(null, "");
+      var left = array.length;
+      var parts = [];
+      array.forEach(function (data, i) {
+        template(data, function (err, html) {
+          if (err) return callback(err);
+          parts[i] = html;
+          left--;
+          if (left === 0) {
+            callback(null, parts.join(""));
+          }
+        })
+      });
     });
   },
 };
@@ -59,7 +70,7 @@ function renderIndex(callback) {
     if (err) return callback(err);
     template({
       title: "This is the title",
-      articles: [{name:"My first"}],
+      articles: [{title:"My first",author:{name:"Tim Caswell"}}],
     }, callback);
   });
 }
