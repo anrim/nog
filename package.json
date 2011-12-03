@@ -14,7 +14,8 @@
   "dependencies": {
     "stack": "0.1.0",
     "creationix": "0.2.3",
-    "corn": "0.0.1"
+    "corn": "0.0.1",
+    "markdown": "0.3.1"
   },
   "devDependencies": {}
 }
