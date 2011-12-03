@@ -1,0 +1,20 @@
+{
+  "author": "Tim Caswell <tim@creationix.com> (http://howtonode.org/)",
+  "name": "nog",
+  "description": "Nog is a node powered web log",
+  "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/c9/nog.git"
+  },
+  "main": "nog.js",
+  "engines": {
+    "node": "~0.6"
+  },
+  "dependencies": {
+    "grain": "0.0.2",
+    "stack": "0.1.0",
+    "creationix": "0.2.3"
+  },
+  "devDependencies": {}
+}
