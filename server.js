@@ -9,7 +9,10 @@ var port = process.env.PORT || 8080;
 Http.createServer(Stack(
   Creationix.log(),
   Creationix.route("GET", "/", function (req, res, params, next) {
-    renderIndex(function (err, html) {
+    render("frontindex", {
+      title: "This is the title",
+      articles: [{title:"My first",author:{name:"Tim Caswell"}}],
+    }, function (err, html) {
       if (err) return next(err);
       res.writeHead(200, {
         "Content-Length": Buffer.byteLength(html),
@@ -26,6 +29,14 @@ var FS = require('fs');
 var Path = require('path');
 var templateDir = Path.join(__dirname, "templates");
 
+function render(name, data, callback) {
+  data.__proto__ = Corn.helpers;
+  compile(name, function (err, template) {
+    if (err) return callback(err);
+    template(data, callback);
+  });
+}
+
 var templateCache = {};
 var readBatch = {};
 function compile(name, callback) {
@@ -40,7 +51,7 @@ function compile(name, callback) {
     readBatch[name].push(callback);
     return;
   }
-  var batch = readBatch[name] = [];
+  readBatch[name] = [callback];
   realCompile(name, function (err, template) {
     if (!err) {
       templateCache[name] = template;
@@ -48,6 +59,7 @@ function compile(name, callback) {
         delete templateCache[name];
       }, 1000);
     }
+    var batch = readBatch[name];
     delete readBatch[name];
     for (var i = 0, l = batch.length; i < l; i++) {
       batch[i](err, template);
@@ -68,38 +80,20 @@ function realCompile(name, callback) {
 }
 
 Corn.helpers = {
-  partial: function (name, value, callback) {
-    compile(name, function (err, template) {
-      if (err) return callback(err);
-      template(value, callback);
-    });
-  },
+  partial: render,
   loop: function (name, array, callback) {
-    compile(name, function (err, template) {
-      if (err) return callback(err);
-      if (array.length === 0) return callback(null, "");
-      var left = array.length;
-      var parts = [];
-      array.forEach(function (data, i) {
-        template(data, function (err, html) {
-          if (err) return callback(err);
-          parts[i] = html;
-          left--;
-          if (left === 0) {
-            callback(null, parts.join(""));
-          }
-        })
+    if (array.length === 0) return callback(null, "");
+    var left = array.length;
+    var parts = [];
+    array.forEach(function (data, i) {
+      render(name, data, function (err, html) {
+        if (err) return callback(err);
+        parts[i] = html;
+        left--;
+        if (left === 0) {
+          callback(null, parts.join(""));
+        }
       });
     });
   },
 };
-
-function renderIndex(callback) {
-  compile("frontindex", function(err, template) {
-    if (err) return callback(err);
-    template({
-      title: "This is the title",
-      articles: [{title:"My first",author:{name:"Tim Caswell"}}],
-    }, callback);
-  });
-}
