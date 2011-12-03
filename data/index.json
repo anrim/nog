@@ -1,6 +1,12 @@
 {
   "title": "My Blog",
   "copyright": "&copy; 2011 My Name",
+  "links": [
+    {"name": "Page One",   "href": "#page1"},
+    {"name": "Page Two",   "href": "#page2"},
+    {"name": "Page Three", "href": "#page3"},
+    {"name": "Page Four",  "href": "#page4"}
+  ],
   "articles": [
     "myfirst",
     "another",

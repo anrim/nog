@@ -1,19 +1,19 @@
 <!doctype html>
 <html>
 <head>
-  <title>@title</title>
+  <title>@title()</title>
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  @partial("topbar", this)
+  @render("topbar", this)
   <div class="container_16">
     <div class="grid_11">
-      <div class="section">@loop("summary", articles)</div>
+      <div class="section">@render("summary", articles)</div>
     </div>
     <div class="grid_5">
       <div class="section">Sidebar</div>
     </div>
   </div>
-  @partial("footer", this)
+  @render("footer", this)
 </body>
 </html>

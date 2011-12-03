@@ -1,8 +1,8 @@
 <div class="topbar">
   <div class="container_16">
-    <h1 class="title grid_5">@title</h1>
+    <h1 class="title grid_5">@title()</h1>
     <ul class="topnav">
-      @loop("topbarlink", links)
+      @render("topbarlink", links)
     </ul>
     <div class="grid_3">
       <a class="subscribe" href="feed.xml">Subscribe to RSS</a>
