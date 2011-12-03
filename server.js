@@ -26,7 +26,36 @@ var FS = require('fs');
 var Path = require('path');
 var templateDir = Path.join(__dirname, "templates");
 
+var templateCache = {};
+var readBatch = {};
 function compile(name, callback) {
+  if (templateCache.hasOwnProperty(name)) {
+    var template = templateCache[name];
+    process.nextTick(function () {
+      callback(null, template);
+    });
+    return;
+  }
+  if (readBatch.hasOwnProperty(name)) {
+    readBatch[name].push(callback);
+    return;
+  }
+  var batch = readBatch[name] = [];
+  realCompile(name, function (err, template) {
+    if (!err) {
+      templateCache[name] = template;
+      setTimeout(function () {
+        delete templateCache[name];
+      }, 1000);
+    }
+    delete readBatch[name];
+    for (var i = 0, l = batch.length; i < l; i++) {
+      batch[i](err, template);
+    }
+  });
+}
+
+function realCompile(name, callback) {
   FS.readFile(Path.join(templateDir, name + ".html"), "utf8", function (err, source) {
     if (err) return callback(err);
     try {
