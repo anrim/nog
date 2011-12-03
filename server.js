@@ -17,7 +17,7 @@ Http.createServer(Stack(
     render("frontindex", {
       title: query("index", "title"),
       links: query("index", "links"),
-      articles: [{title:"My first",author:{name:"Tim Caswell"}}],
+      articles: loadArticles()
     }, function (err, html) {
       if (err) return next(err);
       res.writeHead(200, {
@@ -30,6 +30,31 @@ Http.createServer(Stack(
   Creationix.static("/", Path.join(__dirname, "public"))
 )).listen(port);
 
+function loadArticles() {
+  return function (callback) {
+    query("index", "articles", function (err, list) {
+      if (err) return callback(err);
+      var articles = new Array(list.length);
+      var left = articles.length;
+      console.log("list of articles", list);
+      list.forEach(function (name, i) {
+        query("articles/" + name, function (err, article) {
+          console.log("loaded article " + name, article)
+          if (err) return callback(err);
+          query("authors/" + article.author, function (err, author) {
+            if (err) return callback(err);
+            article.author = author;
+            articles[i] = article;
+            left--;
+            if (left === 0) {
+              callback(null, articles);
+            }
+          });
+        });
+      });
+    });
+  }
+}
 console.log("Server listening at http://localhost:%s/", port);
 
 var templateDir = Path.join(__dirname, "templates");
@@ -41,17 +66,16 @@ Corn.helpers = {
 
 // Query a field from the database
 function query(file, path, callback) {
+  if (typeof path === "function" && callback === undefined) {
+    callback = path;
+    path = [];
+  }
   if (!callback) {
     return function (callback) {
       query(file, path, callback);
     }
   }
-  if (typeof path === "function" && callback === undefined) {
-    callback = path;
-    path = [];
-  } else {
-    path = path.split('.');
-  }
+  if (typeof path === 'string') path = path.split('.');
   db.get(file, function (err, data) {
     if (err) return callback(err);
     for (var i = 0, l = path.length; i < l; i++) {
