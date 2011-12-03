@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+  <title>@title()</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  @render("topbar", this)
+  <div class="container_16">
+    <div class="grid_11">
+      <div class="section">@render("article", article)</div>
+    </div>
+    <div class="grid_5">
+      <div class="section">Sidebar</div>
+    </div>
+  </div>
+  @render("footer", this)
+</body>
+</html>

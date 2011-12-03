@@ -4,20 +4,22 @@ var Http = require('http'),
     createDB = require('jsondb'),
     Corn = require('corn'),
     FS = require('fs'),
+    Markdown = require('markdown'),
     Path = require('path');
 
 var port = process.env.PORT || 8080;
 
-var db = createDB(Path.join(__dirname, "data"));
+var db = createDB(Path.join(__dirname, "data"), ".markdown");
 
 
 Http.createServer(Stack(
   Creationix.log(),
+  Creationix.static("/", Path.join(__dirname, "public")),
   Creationix.route("GET", "/", function (req, res, params, next) {
     render("frontindex", {
       title: query("index", "title"),
       links: query("index", "links"),
-      articles: loadArticles()
+      articles: loadArticles
     }, function (err, html) {
       if (err) return next(err);
       res.writeHead(200, {
@@ -27,33 +29,60 @@ Http.createServer(Stack(
       res.end(html);
     });
   }),
-  Creationix.static("/", Path.join(__dirname, "public"))
-)).listen(port);
-
-function loadArticles() {
-  return function (callback) {
-    query("index", "articles", function (err, list) {
-      if (err) return callback(err);
-      var articles = new Array(list.length);
-      var left = articles.length;
-      list.forEach(function (name, i) {
-        query("articles/" + name, function (err, article) {
-          if (err) return callback(err);
-          query("authors/" + article.author, function (err, author) {
-            if (err) return callback(err);
-            article.author = author;
-            articles[i] = article;
-            left--;
-            if (left === 0) {
-              callback(null, articles);
-            }
-          });
+  Creationix.route("GET",  "/:article", function (req, res, params, next) {
+    loadArticle(params.article, function (err, article) {
+      if (err) {
+        if (err.code === "ENOENT") return next();
+        return next(err);
+      }
+      render("articleindex", {
+        title: query("index", "title"),
+        links: query("index", "links"),
+        article: article
+      }, function (err, html) {
+        if (err) return next(err);
+        res.writeHead(200, {
+          "Content-Length": Buffer.byteLength(html),
+          "Content-Type": "text/html; charset=utf-8"
         });
+        res.end(html);
       });
     });
-  }
-}
+  })
+)).listen(port);
 console.log("Server listening at http://localhost:%s/", port);
+
+function loadArticle(name, callback) {
+  query("articles/" + name, function (err, article) {
+    if (err) return callback(err);
+    article.id = name;
+    article.body = Markdown.parse(article.attachment);
+    query("authors/" + article.author, function (err, author) {
+      if (err) return callback(err);
+      author.id = article.author;
+      article.author = author;
+      callback(null, article);
+    });
+  });
+}
+
+function loadArticles(callback) {
+  query("index", "articles", function (err, list) {
+    if (err) return callback(err);
+    var articles = new Array(list.length);
+    var left = articles.length;
+    list.forEach(function (name, i) {
+      loadArticle(name, function (err, article) {
+        if (err) return callback(err);
+        articles[i] = article;
+        left--;
+        if (left === 0) {
+          callback(null, articles);
+        }
+      });
+    });
+  });
+}
 
 var templateDir = Path.join(__dirname, "templates");
 

@@ -24,8 +24,9 @@ body {
   height: 90px;
 }
 
-.topbar h1 {
+.topbar h1 a {
   font-size: 54px;
+  text-decoration: none;
   color: #fff;
   font-weight: bold;
   text-shadow: 2px 2px 2px #000;
