@@ -1,0 +1,9 @@
+{
+  "title": "My Blog",
+  "copyright": "&copy; 2011 My Name",
+  "articles": [
+    "myfirst",
+    "another",
+    "test"
+  ]
+}
