@@ -36,10 +36,8 @@ function loadArticles() {
       if (err) return callback(err);
       var articles = new Array(list.length);
       var left = articles.length;
-      console.log("list of articles", list);
       list.forEach(function (name, i) {
         query("articles/" + name, function (err, article) {
-          console.log("loaded article " + name, article)
           if (err) return callback(err);
           query("authors/" + article.author, function (err, author) {
             if (err) return callback(err);
