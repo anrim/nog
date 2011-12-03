@@ -1,0 +1,83 @@
+@import url(http://fonts.googleapis.com/css?family=Ubuntu|Ubuntu+Mono);
+@import url(reset.css);
+@import url(text.css);
+@import url(960_16_col.css);
+
+code, textarea, pre {
+  font-family: 'Ubuntu Mono', monospace;
+}
+
+body {
+  font-family: Ubuntu, sans-serif;
+  background: #0c111a url(bluesquare.jpg) no-repeat center top;
+}
+
+.topbar {
+  background-color: #22252a;
+  color: #fff;
+  border-top: 1px solid #aaa;
+  border-bottom: 1px solid #555;
+  margin: 1px 0 20px 0;
+  padding: 0 8px;
+  background-image: -moz-linear-gradient(top, #30353c, #22252a);
+  background-image: -webkit-linear-gradient(top, #30353c, #22252a); 
+  height: 90px;
+}
+
+.topbar h1 {
+  font-size: 54px;
+  color: #fff;
+  font-weight: bold;
+  text-shadow: 2px 2px 2px #000;
+  line-height: 90px;
+  margin-bottom: 0;
+}
+.topnav a {
+  display:block;
+  text-align: center;
+  line-height: 50px;
+  height: 50px;
+  background-color: #7c9cc2;
+  border-top: 1px solid #fff;
+  margin-top: -1px;
+  color: #fff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px #000;
+  border-radius: 0 0 5px 5px;
+  height: 50px;
+  box-shadow: 2px 2px 2px #000;
+  -webkit-transition: height .2s ease-in-out;
+  -moz-transition: height .2s ease-in-out;
+}
+
+.topnav a:hover {
+  height: 60px;
+}
+
+.subscribe {
+  background: transparent url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB9sLFxMpFTnIflIAAAMASURBVDjLNdPdi1VlFIDxZ613n332OTPTRE5jqVCOQUOE3QgSxoRRUBQlCHWRpJAMBQVWRBF0YV8QBAZ1M1AIEhGhRTcFFUJGhZA5FAVFg1KSOTNOnjMfZ+/3a3VhXT3PP/CTW5+9t3O8ffKwTU49pLGHiYIJAAhg9t9gCuKdB+3SPn3qvZOTFx6X8Mzo0XDn1G7rn7PUBCm1RWgpDkhJQYUWEW9qQhK1LoK3fPW42KezH0vvjZvNbRgyBjVu65NI/3dJ82csL35POSTSlOtM40BUnWGOTBSVbKgSzgcpWr6PhUJyblu17VGJQAmS/IDBdzOUs4dkcNUYEj0dqwWpSKjgAu3YR4ssWAyQB9RzJ3Dzv2I54soOQ7cfoJj+kTbX0+71iNYhpQaSIalFyhWy9vJ1FsZHKGLAls4T4oCyew1x4kFGdr2KFG0agE+ewM99hBteh+aIaSYvRNSbUMaMxRbV9A90934NWx+jmPuA3us3sPrbl7QBfeBtqit3EvwaOQqEFphHO9FwsaYJbXPjW9DN26nufoHquXOUm3bCzF34nz/HwNy+d2n/kyCDxYhGh9bqabzSCX1W3roH+/Ap4vwZDGjtPUJxyzTp8C6K5T5RK8o7XsH3FnC+JltCi9BCY42mjF46Tfj2Tfxrk8QvDtECikdmaEZvJBy5nxJgxx40j+GSw3JGJdcm0ZEHfbj2Pitfugjb9lk6+rTVZ0+hYN3bDtD88hVp7ZIp4CZ2WB4MTC2jXiuR0FDEYbr73xEZ6jC8Z0aoRsWOHcRA9KYpWr5NPv2ZZKDcuF28VyGAls0qFhzNYJF69ji4Dv6nb1CM+OcJMsD6zeRSSMsLCKBXbCLXC5hGZPX5jWaWrCCKrz3tzgbi6h9IVWE4fDnOSDIGcQktFMcYMTcU0jNJKspy71g1Niw1zopWSYpL5GoEzKHJUfm/qeNFHAFLgZCWUFuwvH5E6tofKw5uWXn4xaUVuhsndltexkRQ/id8ucVl3FYY0ohHdUzS2b/ev6CL+/8Frh2RP3K7mskAAAAASUVORK5CYII=) left no-repeat;
+  padding-left: 20px;
+  display: block;
+  color: #fff;
+  line-height: 50px;
+  font-size: 14px;
+  font-weight: bold;
+  text-shadow: 2px 2px 2px #000;
+  text-decoration: none;
+}
+
+.section {
+  padding: 10px;
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+  border-radius: 5px;
+  background-color: #efefef;
+}
+
+.footer {
+  margin-top: 20px;
+  padding: 5px 10px;
+  text-align: center;
+  background-color: rgba(255, 255, 255, 0.5);
+}
