@@ -12,7 +12,7 @@
     "node": "~0.6"
   },
   "dependencies": {
-    "grain": "0.0.2",
+    "grain": "0.1.0",
     "stack": "0.1.0",
     "creationix": "0.2.3"
   },
