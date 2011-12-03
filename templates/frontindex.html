@@ -5,8 +5,15 @@
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  <div class="header">@partial("header", this)</div>
-  <div class="body">@loop("summary", articles)</div>
-  <div class="footer">@partial("footer", this)</div>
+  @partial("topbar", this)
+  <div class="container_16">
+    <div class="grid_11">
+      <div class="section">@loop("summary", articles)</div>
+    </div>
+    <div class="grid_5">
+      <div class="section">Sidebar</div>
+    </div>
+  </div>
+  @partial("footer", this)
 </body>
 </html>

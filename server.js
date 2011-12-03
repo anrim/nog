@@ -2,7 +2,9 @@ var Http = require('http'),
     Stack = require('stack'),
     Creationix = require('creationix'),
     createDB = require('jsondb'),
-    Corn = require('corn');
+    Corn = require('corn'),
+    FS = require('fs'),
+    Path = require('path');
 
 var port = process.env.PORT || 8080;
 
@@ -10,7 +12,13 @@ Http.createServer(Stack(
   Creationix.log(),
   Creationix.route("GET", "/", function (req, res, params, next) {
     render("frontindex", {
-      title: "This is the title",
+      title: "My Blog",
+      links: [
+        {name: "Page One",   href: "#page1"},
+        {name: "Page Two",   href: "#page2"},
+        {name: "Page Three", href: "#page3"},
+        {name: "Page Four",  href: "#page4"},
+      ],
       articles: [{title:"My first",author:{name:"Tim Caswell"}}],
     }, function (err, html) {
       if (err) return next(err);
@@ -20,13 +28,12 @@ Http.createServer(Stack(
       });
       res.end(html);
     });
-  })
+  }),
+  Creationix.static("/", Path.join(__dirname, "public"))
 )).listen(port);
 
 console.log("Server listening at http://localhost:%s/", port);
 
-var FS = require('fs');
-var Path = require('path');
 var templateDir = Path.join(__dirname, "templates");
 
 function render(name, data, callback) {
