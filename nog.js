@@ -56,7 +56,9 @@ module.exports = function setup(path, options) {
     }
   };
 
-  return Stack.compose(
+  warehouse();
+
+  var middleware = Stack.compose(
     Creationix.static("/", resourceDir),
     Creationix.route("GET", "/", function (req, res, params, next) {
       render("frontindex", {}, function (err, html) {
@@ -86,6 +88,55 @@ module.exports = function setup(path, options) {
     })
   );
 
+  middleware.warehouse = warehouse;
+
+  return middleware;
+
+  function warehouse() {
+    var tags = {};
+    var authors = {};
+    var articleDates = {};
+    db.get("articles", function (err, articles) {
+      if (err) throw err;
+      var left = articles.length;
+      articles.forEach(function (articleName) {
+        articleName = "articles/" + articleName;
+        db.get(articleName, function (err, article) {
+          articleDates[articleName] = (new Date(article.date)).valueOf();
+          var list = authors[article.author]
+          if (!list) {
+            list = authors[article.author] = [];
+          }
+          list.push(articleName);
+          if (article.tags) {
+            article.tags.forEach(function (tagName) {
+              var list = tags[tagName];
+              if (!list) {
+                list = tags[tagName] = [];
+              }
+              list.push(articleName);
+            });
+          }
+          left--;
+          if (left === 0) {
+            var articleNames = Object.keys(articleDates);
+            articleNames.sort(function (a, b) {
+              return articleDates[b] - articleDates[a];
+            });
+            db.put("index", {
+              articles: articleNames,
+              tags: tags,
+              authors: authors
+            }, function (err) {
+              if (err) throw err;
+              console.log("Done with warehousing")
+            });
+          }
+        });
+      });
+    })
+  }
+
   // Query a field from the database
   function query(file, path, callback) {
     if (typeof path === "function" && callback === undefined) {
@@ -107,9 +158,9 @@ module.exports = function setup(path, options) {
         }
         data = data[path[i]];
       }
-      data._file = file;
-      data._name = Path.basename(file);
-      data._path = path.join(".");
+      Object.defineProperty(data, "_file", {value: file});
+      Object.defineProperty(data, "_name", {value: Path.basename(file)});
+      Object.defineProperty(data, "_path", {value: path.join(".")});
       callback(null, data);
     });
   }
