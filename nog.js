@@ -3,7 +3,7 @@ var JsonDB = require('jsondb');
 var Corn = require('corn');
 var Stack = require('stack');
 var FS = require('fs');
-var Markdown = require('markdown');
+var Markdown = require('markdown').markdown;
 var Creationix = require('creationix');
 
 module.exports = function setup(path, options) {
@@ -14,22 +14,52 @@ module.exports = function setup(path, options) {
 
   var templateCache = {};
   var readBatch = {};
-  
-  Corn.helpers = {
+  var helpers = {
     render: render,
     query: query,
+    renderQuery: function (name, file, path, callback) {
+      if (typeof path === "function" && callback === undefined) {
+        callback = path;
+        path = [];
+      }
+      query(file, path, function (err, data) {
+        if (err) return callback(err);
+        render(name, data, callback);
+      });
+    },
+    markdown: function (input, callback) {
+      var html;
+      try {
+        var tree = Markdown.parse(input);
+        dropCap(tree);
+        html = Markdown.toHTML(tree)
+      } catch (err) {
+        return callback(err);
+      }
+      process.nextTick(function () {
+        callback(null, html);
+      });
+    },
+    markdownTruncated: function (input, callback) {
+      var html;
+      try {
+        var tree = Markdown.parse(input);
+        truncate(tree);
+        dropCap(tree);
+        html = Markdown.toHTML(tree)
+      } catch (err) {
+        return callback(err);
+      }
+      process.nextTick(function () {
+        callback(null, html);
+      });
+    }
   };
-
-
 
   return Stack.compose(
     Creationix.static("/", resourceDir),
     Creationix.route("GET", "/", function (req, res, params, next) {
-      render("frontindex", {
-        title: query("index", "title"),
-        links: query("index", "links"),
-        articles: loadArticles
-      }, function (err, html) {
+      render("frontindex", {}, function (err, html) {
         if (err) return next(err);
         res.writeHead(200, {
           "Content-Length": Buffer.byteLength(html),
@@ -39,16 +69,12 @@ module.exports = function setup(path, options) {
       });
     }),
     Creationix.route("GET",  "/:article", function (req, res, params, next) {
-      loadArticle(params.article, function (err, article) {
+      query("articles/" + params.article, function (err, article) {
         if (err) {
           if (err.code === "ENOENT") return next();
           return next(err);
         }
-        render("articleindex", {
-          title: query("index", "title"),
-          links: query("index", "links"),
-          article: article
-        }, function (err, html) {
+        render("articleindex", article, function (err, html) {
           if (err) return next(err);
           res.writeHead(200, {
             "Content-Length": Buffer.byteLength(html),
@@ -59,38 +85,6 @@ module.exports = function setup(path, options) {
       });
     })
   );
-
-  function loadArticle(name, callback) {
-    query("articles/" + name, function (err, article) {
-      if (err) return callback(err);
-      article.id = name;
-      article.body = Markdown.parse(article.attachment);
-      query("authors/" + article.author, function (err, author) {
-        if (err) return callback(err);
-        author.id = article.author;
-        article.author = author;
-        callback(null, article);
-      });
-    });
-  }
-
-  function loadArticles(callback) {
-    query("index", "articles", function (err, list) {
-      if (err) return callback(err);
-      var articles = new Array(list.length);
-      var left = articles.length;
-      list.forEach(function (name, i) {
-        loadArticle(name, function (err, article) {
-          if (err) return callback(err);
-          articles[i] = article;
-          left--;
-          if (left === 0) {
-            callback(null, articles);
-          }
-        });
-      });
-    });
-  }
 
   // Query a field from the database
   function query(file, path, callback) {
@@ -113,6 +107,9 @@ module.exports = function setup(path, options) {
         }
         data = data[path[i]];
       }
+      data._file = file;
+      data._name = Path.basename(file);
+      data._path = path.join(".");
       callback(null, data);
     });
   }
@@ -120,6 +117,12 @@ module.exports = function setup(path, options) {
 
   // Main entry point for data rendering
   function render(name, data, callback) {
+    console.log('render(' + JSON.stringify(name) + ', ' + JSON.stringify(data));
+    // Allow query data
+    if (typeof data === "string") return query(data, function (err, data) {
+      if (err) return callback(err);
+      render(name, data, callback);
+    });
     // Allow lazy data
     if (typeof data === "function") return data(function (err, data) {
       if (err) return callback(err);
@@ -129,7 +132,7 @@ module.exports = function setup(path, options) {
     if (Array.isArray(data)) return renderArray(name, data, callback);
 
     // Compile and render a template
-    data.__proto__ = Corn.helpers;
+    data.__proto__ = helpers;
     compile(name, function (err, template) {
       if (err) return callback(err);
       template(data, callback);
@@ -194,3 +197,23 @@ module.exports = function setup(path, options) {
   }
 
 };
+
+function dropCap(tree) {
+  var line = tree[0] === "markdown" && Array.isArray(tree[1]) && tree[1][0] === "para" && tree[1][1];
+  var i = line && line.indexOf(" ");
+  if (i < 0) {
+    console.log("Warning, can't find first letter to drop caps", line);
+    return;
+  }
+  var word = line.substr(0, i);
+  line = line.substr(i);
+  tree[1][1] = line;
+  tree[1].splice(1, 0, ["span", {"class": "drop-caps"}, word]);
+}
+
+function truncate(tree) {
+  console.dir(tree);
+  var i = 1;
+  while (tree[i][0] !== "header") { i++; }
+  tree.length = i;
+}
