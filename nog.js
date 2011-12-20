@@ -14,19 +14,12 @@ module.exports = function setup(path, options) {
 
   var templateCache = {};
   var readBatch = {};
+  var queryCache = {};
+  var queryBatch= {};
   var helpers = {
     render: render,
     query: query,
-    renderQuery: function (name, file, path, callback) {
-      if (typeof path === "function" && callback === undefined) {
-        callback = path;
-        path = [];
-      }
-      query(file, path, function (err, data) {
-        if (err) return callback(err);
-        render(name, data, callback);
-      });
-    },
+    renderQuery: renderQuery,
     markdown: function (input, callback) {
       var html;
       try {
@@ -96,6 +89,7 @@ module.exports = function setup(path, options) {
     var tags = {};
     var authors = {};
     var articleDates = {};
+    var nodeVersions = {};
     db.get("articles", function (err, articles) {
       if (err) throw err;
       var left = articles.length;
@@ -103,6 +97,12 @@ module.exports = function setup(path, options) {
         articleName = "articles/" + articleName;
         db.get(articleName, function (err, article) {
           articleDates[articleName] = (new Date(article.date)).valueOf();
+          var majorVersion = article.nodeVersion.substr(0, article.nodeVersion.lastIndexOf('.'));
+          var list = nodeVersions[majorVersion];
+          if (!list) {
+            list = nodeVersions[majorVersion] = [];
+          }
+          list.push(articleName);
           var list = authors[article.author]
           if (!list) {
             list = authors[article.author] = [];
@@ -125,8 +125,12 @@ module.exports = function setup(path, options) {
             });
             db.put("index", {
               articles: articleNames,
-              tags: tags,
-              authors: authors
+              tags: Object.keys(tags).map(function (tag) { return {tag:tag}; }),
+              tagsArticles: tags,
+              authors: Object.keys(authors),
+              authorsArticles: authors,
+              versions: Object.keys(nodeVersions).map(function (version) { return {version:version}; }),
+              versionsArticles: nodeVersions
             }, function (err) {
               if (err) throw err;
               console.log("Done with warehousing")
@@ -149,6 +153,33 @@ module.exports = function setup(path, options) {
       }
     }
     if (typeof path === 'string') path = path.split('.');
+    var key = file + "|" + path;
+
+    if (queryCache.hasOwnProperty(key)) {
+      callback(null, queryCache[key]);
+      return;
+    }
+    if (queryBatch.hasOwnProperty(key)) {
+      queryBatch[key].push(callback);
+      return;
+    }
+    queryBatch[key] = [callback];
+    realQuery(file, path, function (err, data) {
+      if (!err) {
+        queryCache[key] = data;
+        setTimeout(function () {
+          delete queryCache[key];
+        }, 1000);
+      }
+      var batch = queryBatch[key];
+      delete queryBatch[key];
+      for (var i = 0, l = batch.length; i < l; i++) {
+        batch[i](err, data);
+      }
+    });
+  }
+
+  function realQuery(file, path, callback) {
     db.get(file, function (err, data) {
       if (err) return callback(err);
       for (var i = 0, l = path.length; i < l; i++) {
@@ -168,7 +199,6 @@ module.exports = function setup(path, options) {
 
   // Main entry point for data rendering
   function render(name, data, callback) {
-    console.log('render(' + JSON.stringify(name) + ', ' + JSON.stringify(data));
     // Allow query data
     if (typeof data === "string") return query(data, function (err, data) {
       if (err) return callback(err);
@@ -187,6 +217,17 @@ module.exports = function setup(path, options) {
     compile(name, function (err, template) {
       if (err) return callback(err);
       template(data, callback);
+    });
+  }
+
+  function renderQuery(name, file, path, callback) {
+    if (typeof path === "function" && callback === undefined) {
+      callback = path;
+      path = [];
+    }
+    query(file, path, function (err, data) {
+      if (err) return callback(err);
+      render(name, data, callback);
     });
   }
 
@@ -209,10 +250,7 @@ module.exports = function setup(path, options) {
   // A caching and batching template loader and compiler
   function compile(name, callback) {
     if (templateCache.hasOwnProperty(name)) {
-      var template = templateCache[name];
-      process.nextTick(function () {
-        callback(null, template);
-      });
+      callback(null, templateCache[name]);
       return;
     }
     if (readBatch.hasOwnProperty(name)) {
@@ -263,7 +301,6 @@ function dropCap(tree) {
 }
 
 function truncate(tree) {
-  console.dir(tree);
   var i = 1;
   while (tree[i][0] !== "header") { i++; }
   tree.length = i;
