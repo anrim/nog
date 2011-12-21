@@ -1,6 +1,6 @@
 var Path = require('path');
 var JsonDB = require('jsondb');
-var Corn = require('corn');
+var Kernel = require('kernel');
 var Stack = require('stack');
 var FS = require('fs');
 var Markdown = require('markdown').markdown;
@@ -19,6 +19,49 @@ module.exports = function setup(path, options) {
   var helpers = {
     render: render,
     query: query,
+    blockQuery: function (path, block, callback) {
+      query(path, function (err, data) {
+        if (err) return callback(err);
+        block(data, callback);
+      });
+    },
+    loopQuery: function (path, block, callback) {
+      query(path, function (err, array) {
+        if (err) return error(err);
+        var length = array.length, index = length - 1;;
+        var parts = new Array(length);
+        array.forEach(function (data, i) {
+          if (typeof data === "string") {
+            query(data, function (err, data) {
+              if (err) return error(err);
+              block(data, done);
+            });
+          } else {
+            block(data, done);
+          }
+          function done(err, result) {
+            if (err) return error(err);
+            parts[i] = result;
+            check();
+          }
+        });
+        var done = false;
+        check();
+        function error(err) {
+          if (done) return;
+          done = true;
+          callback(err);
+        }
+        function check() {
+          if (done) return;
+          while (parts.hasOwnProperty(index)) { index--; }
+          if (index < 0) {
+            done = true;
+            callback(null, parts.join(''));
+          }
+        }
+      });
+    },
     renderQuery: renderQuery,
     markdown: function (input, callback) {
       var html;
@@ -54,13 +97,9 @@ module.exports = function setup(path, options) {
   var middleware = Stack.compose(
     Creationix.static("/", resourceDir),
     Creationix.route("GET", "/", function (req, res, params, next) {
-      render("frontindex", {}, function (err, html) {
+      query("index#articles", function (err, articles) {
         if (err) return next(err);
-        res.writeHead(200, {
-          "Content-Length": Buffer.byteLength(html),
-          "Content-Type": "text/html; charset=utf-8"
-        });
-        res.end(html);
+        render("frontindex", {articles: articles}, sendToBrowser(req, res, next));
       });
     }),
     Creationix.route("GET",  "/:article", function (req, res, params, next) {
@@ -69,14 +108,7 @@ module.exports = function setup(path, options) {
           if (err.code === "ENOENT") return next();
           return next(err);
         }
-        render("articleindex", article, function (err, html) {
-          if (err) return next(err);
-          res.writeHead(200, {
-            "Content-Length": Buffer.byteLength(html),
-            "Content-Type": "text/html; charset=utf-8"
-          });
-          res.end(html);
-        });
+        render("articleindex", article, sendToBrowser(req, res, next));
       });
     })
   );
@@ -141,19 +173,30 @@ module.exports = function setup(path, options) {
     })
   }
 
+  function sendToBrowser(req, res, next) {
+    return function (err, html) {
+      if (err) return next(err);
+      res.writeHead(200, {
+        "Content-Length": Buffer.byteLength(html),
+        "Content-Type": "text/html; charset=utf-8"
+      });
+      res.end(html);
+    };
+  }
+
   // Query a field from the database
-  function query(file, path, callback) {
-    if (typeof path === "function" && callback === undefined) {
-      callback = path;
-      path = [];
+  function query(path, callback) {
+    var i = path.indexOf("#");
+    var file;
+    if (i >= 0) {
+      file = path.substr(0, i);
+      path = path.substr(i + 1);
+    } else {
+      file = path;
+      path = "";
     }
-    if (!callback) {
-      return function (callback) {
-        query(file, path, callback);
-      }
-    }
-    if (typeof path === 'string') path = path.split('.');
     var key = file + "|" + path;
+    path = path ? path.split(".") : [];
 
     if (queryCache.hasOwnProperty(key)) {
       callback(null, queryCache[key]);
@@ -214,9 +257,16 @@ module.exports = function setup(path, options) {
 
     // Compile and render a template
     data.__proto__ = helpers;
-    compile(name, function (err, template) {
+    var path = Path.join(templateDir, name + ".html");
+    Kernel(path, function (err, template) {
       if (err) return callback(err);
-      template(data, callback);
+      template(data, function (err, result) {
+        if (err) {
+          err.message += "\n" + require('util').inspect({file:path,locals:data});
+          return callback(err);
+        }
+        callback(null, result);
+      });
     });
   }
 
@@ -247,43 +297,6 @@ module.exports = function setup(path, options) {
     });
   }
 
-  // A caching and batching template loader and compiler
-  function compile(name, callback) {
-    if (templateCache.hasOwnProperty(name)) {
-      callback(null, templateCache[name]);
-      return;
-    }
-    if (readBatch.hasOwnProperty(name)) {
-      readBatch[name].push(callback);
-      return;
-    }
-    readBatch[name] = [callback];
-    realCompile(name, function (err, template) {
-      if (!err) {
-        templateCache[name] = template;
-        setTimeout(function () {
-          delete templateCache[name];
-        }, 1000);
-      }
-      var batch = readBatch[name];
-      delete readBatch[name];
-      for (var i = 0, l = batch.length; i < l; i++) {
-        batch[i](err, template);
-      }
-    });
-  }
-
-  function realCompile(name, callback) {
-    FS.readFile(Path.join(templateDir, name + ".html"), "utf8", function (err, source) {
-      if (err) return callback(err);
-      try {
-        var template = Corn(source);
-      } catch (err) {
-        return callback(err);
-      }
-      callback(null, template);
-    });
-  }
 
 };
 

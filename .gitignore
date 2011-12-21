@@ -1,6 +1,6 @@
 node_modules/.bin/
 node_modules/creationix/
 node_modules/stack/
-node_modules/corn/
+node_modules/kernel/
 node_modules/jsondb/
 node_modules/markdown/
