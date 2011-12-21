@@ -1,19 +1,27 @@
 <!doctype html>
 <html>
 <head>
-  <title>@title()</title>
+  <title>{query("meta#title")}</title>
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  @render("topbar", this)
+  {render("topbar", this)}
   <div class="container_16">
     <div class="grid_11">
-      <div class="section">@render("summary", articles)</div>
+      <div class="section">
+        {#loopQuery("index#articles")}
+          <h1><a href="/{_name}">{title}</a></h1>
+          {#blockQuery(author)}
+            <p>{name}</p>
+          {/blockQuery}
+          <p><a href="/{_name}">Read More</a></p>
+        {/loopQuery}
+      </div>
     </div>
     <div class="grid_5">
       <div class="section">Sidebar</div>
     </div>
   </div>
-  @render("footer", this)
+  {render("footer", this)}
 </body>
 </html>

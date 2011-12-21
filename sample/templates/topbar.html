@@ -1,8 +1,10 @@
 <div class="topbar">
   <div class="container_16">
-    <h1 class="title grid_5"><a href="/">@title()</a></h1>
+    <h1 class="title grid_5"><a href="/">{query("meta#title")}</a></h1>
     <ul class="topnav">
-      @render("topbarlink", links)
+      {#loopQuery("meta#links")}
+        <li class="grid_2"><a href="{href}">{name}</a></li>
+      {/loopQuery}
     </ul>
     <div class="grid_3">
       <a class="subscribe" href="feed.xml">Subscribe to RSS</a>

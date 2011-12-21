@@ -1,1 +1,7 @@
-{"author":"creationix","title":"Another Article"}
+{
+  "author": "authors/creationix",
+  "title": "My First Blog Post",
+  "date": "Dec 17, 2011",
+  "tags": ["red", "green", "blue"],
+  "nodeVersion": "0.4.12"
+}

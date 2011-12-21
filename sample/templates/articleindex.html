@@ -1,20 +1,23 @@
 <!doctype html>
 <html>
 <head>
-  <title>@title()</title>
+  <title>{query("meta#title")}</title>
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  @render("topbar", this)
+  {render("topbar", this)}
   <div class="container_16">
     <div class="grid_11">
-      <div class="section">@render("article", article)</div>
+      <div class="section">
+        <h1><a href="/{_name}">{title}</a></h1>
+        {markdown(attachment)}
+      </div>
     </div>
     <div class="grid_5">
-      <div class="section">@render("author", article.author)</div>
+      <div class="section">{render("author", author)}</div>
       <div class="section">More stuff</div>
     </div>
   </div>
-  @render("footer", this)
+  {render("footer", this)}
 </body>
 </html>
