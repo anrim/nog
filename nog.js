@@ -2,7 +2,6 @@ var Path = require('path');
 var JsonDB = require('jsondb');
 var Kernel = require('kernel');
 var Stack = require('stack');
-var FS = require('fs');
 var Markdown = require('markdown').markdown;
 var Creationix = require('creationix');
 
@@ -12,8 +11,6 @@ module.exports = function setup(path, options) {
   var resourceDir = options.resourceDir || Path.join(path, "resources");
   var db = JsonDB(path, ".markdown");
 
-  var templateCache = {};
-  var readBatch = {};
   var queryCache = {};
   var queryBatch= {};
   var helpers = {
@@ -28,7 +25,7 @@ module.exports = function setup(path, options) {
     loopQuery: function (path, block, callback) {
       query(path, function (err, array) {
         if (err) return error(err);
-        var length = array.length, index = length - 1;;
+        var length = array.length, index = length - 1;
         var parts = new Array(length);
         array.forEach(function (data, i) {
           if (typeof data === "string") {
@@ -68,7 +65,7 @@ module.exports = function setup(path, options) {
       try {
         var tree = Markdown.parse(input);
         dropCap(tree);
-        html = Markdown.toHTML(tree)
+        html = Markdown.toHTML(tree);
       } catch (err) {
         return callback(err);
       }
@@ -82,7 +79,7 @@ module.exports = function setup(path, options) {
         var tree = Markdown.parse(input);
         truncate(tree);
         dropCap(tree);
-        html = Markdown.toHTML(tree)
+        html = Markdown.toHTML(tree);
       } catch (err) {
         return callback(err);
       }
@@ -135,7 +132,7 @@ module.exports = function setup(path, options) {
             list = nodeVersions[majorVersion] = [];
           }
           list.push(articleName);
-          var list = authors[article.author]
+          var list = authors[article.author];
           if (!list) {
             list = authors[article.author] = [];
           }
@@ -165,12 +162,12 @@ module.exports = function setup(path, options) {
               versionsArticles: nodeVersions
             }, function (err) {
               if (err) throw err;
-              console.log("Done with warehousing")
+              console.log("Done with warehousing");
             });
           }
         });
       });
-    })
+    });
   }
 
   function sendToBrowser(req, res, next) {
@@ -317,6 +314,6 @@ function dropCap(tree) {
 
 function truncate(tree) {
   var i = 1;
-  while (tree[i][0] !== "header") { i++; }
+  while (tree[i] && tree[i][0] !== "header") { i++; }
   tree.length = i;
 }
