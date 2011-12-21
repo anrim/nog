@@ -232,9 +232,11 @@ module.exports = function setup(path, options) {
         }
         data = data[path[i]];
       }
-      Object.defineProperty(data, "_file", {value: file});
-      Object.defineProperty(data, "_name", {value: Path.basename(file)});
-      Object.defineProperty(data, "_path", {value: path.join(".")});
+      if (data && typeof data === "object") {
+        Object.defineProperty(data, "_file", {value: file});
+        Object.defineProperty(data, "_name", {value: Path.basename(file)});
+        Object.defineProperty(data, "_path", {value: path.join(".")});
+      }
       callback(null, data);
     });
   }
