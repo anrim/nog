@@ -2,7 +2,7 @@
   "author": "Tim Caswell <tim@creationix.com> (http://howtonode.org/)",
   "name": "nog",
   "description": "Nog is a node powered web log",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "repository": {
     "type": "git",
     "url": "git://github.com/c9/nog.git"
