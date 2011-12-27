@@ -1,9 +1,11 @@
 var Path = require('path');
+var FS = require('fs');
 var JsonDB = require('jsondb');
 var Kernel = require('kernel');
 var Stack = require('stack');
 var Markdown = require('markdown').markdown;
 var Creationix = require('creationix');
+var Runner = require('runner');
 
 module.exports = function setup(path, options) {
   options = options || {};
@@ -75,13 +77,13 @@ module.exports = function setup(path, options) {
       try {
         var tree = Markdown.parse(input);
         dropCap(tree);
-        html = Markdown.toHTML(tree);
+        processSnippets(tree, function (err) {
+          html = Markdown.toHTML(tree);
+          callback(null, html);
+        });
       } catch (err) {
         return callback(err);
       }
-      process.nextTick(function () {
-        callback(null, html);
-      });
     },
     markdownTruncated: function (input, callback) {
       var html;
@@ -334,6 +336,43 @@ module.exports = function setup(path, options) {
       });
     });
   }
+
+  function processSnippets(tree, callback) {
+    var left = 0;
+    tree.forEach(function (line, i) {
+      if (!(Array.isArray(line) && line[0] === "code_block")) return;
+      var code = line[1];
+      if (code.substr(0, 2) !== "#@") return;
+      var snippetPath = Path.join(path, "articles", code.substr(2));
+      left++;
+      var code, results;
+      FS.readFile(snippetPath, 'utf8', function (err, output) {
+        if (err) return callback(err);
+        code = output;
+        check();
+      });
+      Runner(snippetPath, function (err, output) {
+        if (err) return callback(err);
+        results = output;
+        check();
+      });
+      function check() {
+        if (results && code) {
+          // TODO: Bug markdown.js guys to not escape contents of script tags
+          // so we won't have to stuff the json in a hidden div
+          tree[i] = ["div", {"class":"snippet",id: "" + i},
+            ["pre",{class:"code"}, ["code", code]],
+            ["pre",{class:"output"}, ["code"]],
+            ["button", {onclick: "activate(" + i + ");"}, "Run this Snippet"],
+            ["div", {class:"json",style:"display:none;"}, JSON.stringify(results)],
+          ]
+          if (--left === 0) callback();
+        }
+      }
+    });
+    if (left === 0) callback();
+  }
+
 
 
 };
