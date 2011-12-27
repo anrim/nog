@@ -302,7 +302,7 @@ module.exports = function setup(path, options) {
 function dropCap(tree) {
   var line = tree[0] === "markdown" && Array.isArray(tree[1]) && tree[1][0] === "para" && tree[1][1];
   var i = line && line.indexOf(" ");
-  if (i < 0) {
+  if (!(line || line === 0)) {
     console.log("Warning, can't find first letter to drop caps", line);
     return;
   }
