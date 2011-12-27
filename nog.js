@@ -17,13 +17,23 @@ module.exports = function setup(path, options) {
     render: render,
     query: query,
     blockQuery: function (path, block, callback) {
+      if (typeof path !== "string") {
+        return callback(new Error("blockQuery variable should be string query"));
+      }
       query(path, function (err, data) {
         if (err) return callback(err);
         block(data, callback);
       });
     },
     loopQuery: function (path, block, callback) {
-      query(path, function (err, array) {
+      if (typeof path === "string") {
+        query(path, loop);
+      } else if (Array.isArray(path)) {
+        loop(null, path)
+      } else {
+        return callback(new Error("loopQuery variable should be string query or array"));
+      }
+      function loop(err, array) {
         if (err) return error(err);
         var length = array.length, index = length - 1;
         var parts = new Array(length);
@@ -57,7 +67,7 @@ module.exports = function setup(path, options) {
             callback(null, parts.join(''));
           }
         }
-      });
+      }
     },
     renderQuery: renderQuery,
     markdown: function (input, callback) {
@@ -96,6 +106,33 @@ module.exports = function setup(path, options) {
     Creationix.route("GET", "/", function (req, res, params, next) {
       query("index#articles", function (err, articles) {
         if (err) return next(err);
+        render("frontindex", {articles: articles}, sendToBrowser(req, res, next));
+      });
+    }),
+    Creationix.route("GET", "/tags/:tag", function (req, res, params, next) {
+      query("index#tagsArticles." + params.tag, function (err, articles) {
+        if (err) {
+          if (err.code === "ENOENT") return next();
+          return next(err);
+        }
+        render("frontindex", {articles: articles}, sendToBrowser(req, res, next));
+      });
+    }),
+    Creationix.route("GET", "/authors/:author", function (req, res, params, next) {
+      query("index#authorsArticles.authors/" + params.author, function (err, articles) {
+        if (err) {
+          if (err.code === "ENOENT") return next();
+          return next(err);
+        }
+        render("frontindex", {articles: articles}, sendToBrowser(req, res, next));
+      });
+    }),
+    Creationix.route("GET", "/versions/:version", function (req, res, params, next) {
+      query("index#versionsArticles." + params.version, function (err, articles) {
+        if (err) {
+          if (err.code === "ENOENT") return next();
+          return next(err);
+        }
         render("frontindex", {articles: articles}, sendToBrowser(req, res, next));
       });
     }),
@@ -225,7 +262,9 @@ module.exports = function setup(path, options) {
       for (var i = 0, l = path.length; i < l; i++) {
         var part = path[i];
         if (!data.hasOwnProperty(part)) {
-          return callback(new Error("Bad path " + part));
+          var err = new Error("Bad path " + part);
+          err.code = "ENOENT";
+          return callback(err);
         }
         data = data[path[i]];
       }
