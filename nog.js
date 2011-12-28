@@ -146,6 +146,20 @@ module.exports = function setup(path, options) {
         }
         render("articleindex", article, sendToBrowser(req, res, next));
       });
+    }),
+    Creationix.route("GET",  "/snippets/:snippetPath", function (req, res, params, next) {
+      Runner(Path.join(path, "articles", params.snippetPath), function (err, output) {
+        if (err) {
+          if (err.code === "ENOENT") return next();
+          return next(err);
+        }
+        var body = JSON.stringify(output);
+        res.writeHead(200, {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body)
+        });
+        res.end(body);
+      });
     })
   );
 
@@ -339,36 +353,26 @@ module.exports = function setup(path, options) {
 
   function processSnippets(tree, callback) {
     var left = 0;
+    var isDone;
     tree.forEach(function (line, i) {
       if (!(Array.isArray(line) && line[0] === "code_block")) return;
       var code = line[1];
       if (code.substr(0, 2) !== "#@") return;
-      var snippetPath = Path.join(path, "articles", code.substr(2));
+      var snippetPath = code.substr(2)
       left++;
-      var code, results;
-      FS.readFile(snippetPath, 'utf8', function (err, output) {
-        if (err) return callback(err);
-        code = output;
-        check();
-      });
-      Runner(snippetPath, function (err, output) {
-        if (err) return callback(err);
-        results = output;
-        check();
-      });
-      function check() {
-        if (results && code) {
-          // TODO: Bug markdown.js guys to not escape contents of script tags
-          // so we won't have to stuff the json in a hidden div
-          tree[i] = ["div", {"class":"snippet",id: "" + i},
-            ["pre",{class:"code"}, ["code", code]],
-            ["pre",{class:"output"}, ["code"]],
-            ["button", {onclick: "activate(" + i + ");"}, "Run this Snippet"],
-            ["div", {class:"json",style:"display:none;"}, JSON.stringify(results)],
-          ]
-          if (--left === 0) callback();
+      FS.readFile(Path.join(path, "articles", snippetPath), 'utf8', function (err, code) {
+        if (isDone) return;
+        if (err) {
+          isDone = true;
+          return callback(err);
         }
-      }
+        tree[i] = ["div", {class: "snippet", source: snippetPath},
+          ["pre", {class: "code"},
+            ["code", code]
+          ]
+        ];
+        if (--left === 0) callback();
+      });
     });
     if (left === 0) callback();
   }
