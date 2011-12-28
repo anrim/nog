@@ -119,7 +119,6 @@ module.exports = function setup(path, options) {
       // Load settings from cookie
       if (req.headers.cookie) {
         settings = {};
-        console.log("Cookie", req.headers.cookie);
         req.headers.cookie.split(";").forEach(function (part) {
           part = part.trim();
           var i = part.indexOf("=");
@@ -127,7 +126,6 @@ module.exports = function setup(path, options) {
             var key = part.substr(0, i);
             var value = part.substr(i + 1);
             settings[key] = value;
-            console.log("Cookie value", key, value);
           }
         });
       }
@@ -135,7 +133,6 @@ module.exports = function setup(path, options) {
       // If there is a query, merge it with settings and write a new cookie
       if (req.uri.query) {
         settings = settings || {};
-        console.log("query", req.query);
         Object.keys(req.query).forEach(function (name) {
           settings[name] = req.query[name];
         });
@@ -154,8 +151,6 @@ module.exports = function setup(path, options) {
       if (settings) {
         req.query = settings;
       }
-
-      console.log("Settings", settings);
       next();
     },
     Creationix.route("GET", "/", function (req, res, params, next) {
@@ -435,8 +430,6 @@ module.exports = function setup(path, options) {
     // Filter by node version if requested.
     if (req.query.node_version) {
       var version = req.query.node_version;
-      console.log("Filtering by %s", version)
-      console.log(nodeVersions);
       articles = articles.filter(function (article) {
         return nodeVersions[version] && nodeVersions[version].indexOf(article) >= 0;
       });
