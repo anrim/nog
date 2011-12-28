@@ -16,7 +16,8 @@
     "creationix": "~0.2",
     "kernel": "~0.0",
     "jsondb": "~0.0",
-    "markdown": "~0.3"
+    "markdown": "~0.3",
+    "recorder": "~0.0"
   },
   "devDependencies": {}
 }
