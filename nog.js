@@ -107,8 +107,6 @@ module.exports = function setup(path, options) {
     }
   };
 
-  warehouse();
-
   var middleware = Stack.compose(
     Creationix.static("/", resourceDir),
     function (req, res, next) {
