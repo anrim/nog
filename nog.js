@@ -5,7 +5,7 @@ var Kernel = require('kernel');
 var Stack = require('stack');
 var Markdown = require('markdown').markdown;
 var Creationix = require('creationix');
-var Runner = require('runner');
+var Recorder = require('recorder');
 
 module.exports = function setup(path, options) {
   options = options || {};
@@ -148,7 +148,7 @@ module.exports = function setup(path, options) {
       });
     }),
     Creationix.route("GET",  "/snippets/:snippetPath", function (req, res, params, next) {
-      Runner(Path.join(path, "articles", params.snippetPath), function (err, output) {
+      Recorder(Path.join(path, "articles", params.snippetPath), function (err, output) {
         if (err) {
           if (err.code === "ENOENT") return next();
           return next(err);
