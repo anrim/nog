@@ -37,7 +37,7 @@ module.exports = function setup(path, options) {
       if (typeof path === "string") {
         query(path, loop);
       } else if (Array.isArray(path)) {
-        loop(null, path)
+        loop(null, path);
       } else {
         return callback(new Error("loopQuery variable should be string query or array"));
       }
@@ -146,7 +146,7 @@ module.exports = function setup(path, options) {
         value.push("HttpOnly");
         res.setHeader("Set-Cookie", value.join("; "));
       }
-      
+
       // Put settings in query
       if (settings) {
         req.query = settings;
@@ -405,7 +405,7 @@ module.exports = function setup(path, options) {
       if (!(Array.isArray(line) && line[0] === "code_block")) return;
       var code = line[1];
       if (code.substr(0, 2) !== "#@") return;
-      var snippetPath = code.substr(2)
+      var snippetPath = code.substr(2);
       left++;
       FS.readFile(Path.join(path, "articles", snippetPath), 'utf8', function (err, code) {
         if (isDone) return;
@@ -426,7 +426,7 @@ module.exports = function setup(path, options) {
 
   // Sorts and filters articles based on query parameters
   function filterArticles(articles, req) {
-    
+
     // Filter by node version if requested.
     if (req.query.node_version) {
       var version = req.query.node_version;
@@ -434,11 +434,11 @@ module.exports = function setup(path, options) {
         return nodeVersions[version] && nodeVersions[version].indexOf(article) >= 0;
       });
     }
-    
+
     // Sort by date
     articles.sort(function (a, b) {
       return articleDates[b] - articleDates[a];
-    })
+    });
     return articles;
 
   }
