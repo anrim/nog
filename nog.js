@@ -6,6 +6,8 @@ var Stack = require('stack');
 var Markdown = require('markdown').markdown;
 var Creationix = require('creationix');
 var Recorder = require('recorder');
+var Url = require('url');
+var QueryString = require('querystring');
 
 module.exports = function setup(path, options) {
   options = options || {};
@@ -18,6 +20,10 @@ module.exports = function setup(path, options) {
   var helpers = {
     render: render,
     query: query,
+    blockIf: function (condition, block, callback) {
+      if (condition) block({}, callback);
+      else callback(null, "");
+    },
     blockQuery: function (path, block, callback) {
       if (typeof path !== "string") {
         return callback(new Error("blockQuery variable should be string query"));
@@ -105,10 +111,57 @@ module.exports = function setup(path, options) {
 
   var middleware = Stack.compose(
     Creationix.static("/", resourceDir),
+    function (req, res, next) {
+      if (!req.hasOwnProperty("uri")) { req.uri = Url.parse(req.url); }
+      if (!req.hasOwnProperty("query")) { req.query = QueryString.parse(req.uri.query); }
+      var settings;
+
+      // Load settings from cookie
+      if (req.headers.cookie) {
+        settings = {};
+        console.log("Cookie", req.headers.cookie);
+        req.headers.cookie.split(";").forEach(function (part) {
+          part = part.trim();
+          var i = part.indexOf("=");
+          if (i) {
+            var key = part.substr(0, i);
+            var value = part.substr(i + 1);
+            settings[key] = value;
+            console.log("Cookie value", key, value);
+          }
+        });
+      }
+
+      // If there is a query, merge it with settings and write a new cookie
+      if (req.uri.query) {
+        settings = settings || {};
+        console.log("query", req.query);
+        Object.keys(req.query).forEach(function (name) {
+          settings[name] = req.query[name];
+        });
+        var value = Object.keys(settings).map(function (name) {
+          req.query[name] = settings[name];
+          return name + "=" + settings[name];
+        });
+        // Expires in one week
+        value.push("Path=/");
+        value.push("Expires=" + (new Date(Date.now() + 604800000)));
+        value.push("HttpOnly");
+        res.setHeader("Set-Cookie", value.join("; "));
+      }
+      
+      // Put settings in query
+      if (settings) {
+        req.query = settings;
+      }
+
+      console.log("Settings", settings);
+      next();
+    },
     Creationix.route("GET", "/", function (req, res, params, next) {
       query("index#articles", function (err, articles) {
         if (err) return next(err);
-        render("frontindex", {articles: articles}, sendToBrowser(req, res, next));
+        render("frontindex", {req: req, articles: filterArticles(articles, req)}, sendToBrowser(req, res, next));
       });
     }),
     Creationix.route("GET", "/tags/:tag", function (req, res, params, next) {
@@ -117,7 +170,7 @@ module.exports = function setup(path, options) {
           if (err.code === "ENOENT") return next();
           return next(err);
         }
-        render("frontindex", {articles: articles}, sendToBrowser(req, res, next));
+        render("frontindex", {req: req, query: req.query, articles: filterArticles(articles, req)}, sendToBrowser(req, res, next));
       });
     }),
     Creationix.route("GET", "/authors/:author", function (req, res, params, next) {
@@ -126,7 +179,7 @@ module.exports = function setup(path, options) {
           if (err.code === "ENOENT") return next();
           return next(err);
         }
-        render("frontindex", {articles: articles}, sendToBrowser(req, res, next));
+        render("frontindex", {req: req, articles: filterArticles(articles, req)}, sendToBrowser(req, res, next));
       });
     }),
     Creationix.route("GET", "/versions/:version", function (req, res, params, next) {
@@ -135,7 +188,7 @@ module.exports = function setup(path, options) {
           if (err.code === "ENOENT") return next();
           return next(err);
         }
-        render("frontindex", {articles: articles}, sendToBrowser(req, res, next));
+        render("frontindex", {req: req, articles: filterArticles(articles, req)}, sendToBrowser(req, res, next));
       });
     }),
     Creationix.route("GET",  "/:article", function (req, res, params, next) {
@@ -144,7 +197,7 @@ module.exports = function setup(path, options) {
           if (err.code === "ENOENT") return next();
           return next(err);
         }
-        render("articleindex", article, sendToBrowser(req, res, next));
+        render("articleindex", {req: req, article: article}, sendToBrowser(req, res, next));
       });
     }),
     Creationix.route("GET",  "/snippets/:snippetPath", function (req, res, params, next) {
@@ -165,13 +218,15 @@ module.exports = function setup(path, options) {
 
   middleware.warehouse = warehouse;
 
+  // This is cheating, but makes it easy to get at.
+  var articleDates = {};
+  var nodeVersions = {};
+
   return middleware;
 
   function warehouse() {
     var tags = {};
     var authors = {};
-    var articleDates = {};
-    var nodeVersions = {};
     db.get("articles", function (err, articles) {
       if (err) throw err;
       var left = articles.length;
@@ -201,12 +256,9 @@ module.exports = function setup(path, options) {
           }
           left--;
           if (left === 0) {
-            var articleNames = Object.keys(articleDates);
-            articleNames.sort(function (a, b) {
-              return articleDates[b] - articleDates[a];
-            });
             db.put("index", {
-              articles: articleNames,
+              articles: Object.keys(articleDates),
+              articleDates: articleDates,
               tags: Object.keys(tags).map(function (tag) { return {tag:tag}; }),
               tagsArticles: tags,
               authors: Object.keys(authors),
@@ -377,7 +429,26 @@ module.exports = function setup(path, options) {
     if (left === 0) callback();
   }
 
+  // Sorts and filters articles based on query parameters
+  function filterArticles(articles, req) {
+    
+    // Filter by node version if requested.
+    if (req.query.node_version) {
+      var version = req.query.node_version;
+      console.log("Filtering by %s", version)
+      console.log(nodeVersions);
+      articles = articles.filter(function (article) {
+        return nodeVersions[version] && nodeVersions[version].indexOf(article) >= 0;
+      });
+    }
+    
+    // Sort by date
+    articles.sort(function (a, b) {
+      return articleDates[b] - articleDates[a];
+    })
+    return articles;
 
+  }
 
 };
 
@@ -399,3 +470,4 @@ function truncate(tree) {
   while (tree[i] && tree[i][0] !== "header") { i++; }
   tree.length = i;
 }
+
