@@ -83,13 +83,12 @@ module.exports = function setup(path, options) {
       try {
         var tree = Markdown.parse(input);
         dropCap(tree);
-        processSnippets(tree, function (err) {
-          html = Markdown.toHTML(tree);
-          callback(null, html);
-        });
+        processSnippets(tree);
+        html = Markdown.toHTML(tree);
       } catch (err) {
         return callback(err);
       }
+      callback(null, html);
     },
     markdownTruncated: function (input, callback) {
       var html;
@@ -396,30 +395,25 @@ module.exports = function setup(path, options) {
     });
   }
 
-  function processSnippets(tree, callback) {
-    var left = 0;
-    var isDone;
+  function processSnippets(tree) {
     tree.forEach(function (line, i) {
       if (!(Array.isArray(line) && line[0] === "code_block")) return;
       var code = line[1];
       if (code.substr(0, 2) !== "#@") return;
-      var snippetPath = code.substr(2);
-      left++;
-      FS.readFile(Path.join(path, "articles", snippetPath), 'utf8', function (err, code) {
-        if (isDone) return;
-        if (err) {
-          isDone = true;
-          return callback(err);
-        }
-        tree[i] = ["div", {class: "snippet", source: snippetPath},
-          ["pre", {class: "code"},
-            ["code", code]
-          ]
-        ];
-        if (--left === 0) callback();
-      });
+      var url = code.substr(2);
+      var p = url.indexOf("#");
+      var repo = url.substr(0, p);
+      var file = url.substr(p + 1);
+      tree[i] = ["script", {src: "http://64.30.143.68/serve?" + QueryString.stringify({
+        repo: repo,
+        file: file,
+        linestart: 0,
+        lineend: 0,
+        mode: "javascript",
+        theme: "dawn",
+        showlines: "false"
+      }), defer: "defer"}];
     });
-    if (left === 0) callback();
   }
 
   // Sorts and filters articles based on query parameters
