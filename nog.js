@@ -404,11 +404,25 @@ module.exports = function setup(path, options) {
       var p = url.indexOf("#");
       var repo = url.substr(0, p);
       var file = url.substr(p + 1);
+      var linestart = 0;
+      var lineend = 0;
+      p = file.indexOf(',');
+      if (p >= 0) {
+        var range = file.substr(p + 1);
+        file = file.substr(0,p);
+        p = range.indexOf("-");
+        if (p >= 0) {
+          linestart = parseInt(range.substr(0, p), 10);
+          lineend = parseInt(range.substr(p + 1), 10);
+        } else {
+          linestart = lineend = parseInt(range, 10);
+        }
+      }
       tree[i] = ["script", {src: "http://64.30.143.68/serve?" + QueryString.stringify({
         repo: repo,
         file: file,
-        linestart: 0,
-        lineend: 0,
+        linestart: linestart,
+        lineend: lineend,
         mode: "javascript",
         theme: "dawn",
         showlines: "false"
