@@ -8,6 +8,7 @@ var Creationix = require('creationix');
 var Recorder = require('recorder');
 var Url = require('url');
 var QueryString = require('querystring');
+var HTTPS = require('https');
 
 module.exports = function setup(path, options) {
   options = options || {};
@@ -108,6 +109,52 @@ module.exports = function setup(path, options) {
 
   var middleware = Stack.compose(
     Creationix.static("/", resourceDir),
+    Creationix.route("GET",  "/snippets", function (req, res, params, next) {
+      if (!req.hasOwnProperty("uri")) { req.uri = Url.parse(req.url); }
+      if (!req.hasOwnProperty("query")) { req.query = QueryString.parse(req.uri.query); }
+      console.log("query", req.query);
+      var repo = Url.parse(req.query.repo);
+      var pathname = repo.pathname;
+      var path;
+      if (pathname.substr(pathname.length - 4) === ".git") {
+        pathname = pathname.substr(0, pathname.length - 4);
+      }
+      console.log("repo", repo);
+      switch (repo.hostname) {
+        case "github.com":
+          path = pathname + "/master/" + req.query.file;
+          break;
+        case "gist.github.com":
+          path = "/gist" + pathname + "/" + req.query.file;
+          break;
+        default:
+          next(new Error("Unknown git provider " + repo.hostname));
+          return;
+      }
+      HTTPS.get({
+        host: "raw.github.com",
+        headers: {Host: "raw.github.com"},
+        path: path
+      }, function (res) {
+        if (res.statusCode === 404) {
+          return next();
+        }
+        if (res.statusCode !== 200) {
+          return next(new Error("Problem getting code from github.\n" + path + "\n" + JSON.stringify(res.headers)));
+        }
+        res.setEncoding('utf8');
+        var data = "";
+        res.on('data', function (chunk) {
+          data += chunk;
+        });
+        res.on('end', function () {
+          // TODO: split and send text wrapped in script
+          console.log("data", data);
+          next();
+        });
+      });
+
+    }),
     function (req, res, next) {
       if (!req.hasOwnProperty("uri")) { req.uri = Url.parse(req.url); }
       if (!req.hasOwnProperty("query")) { req.query = QueryString.parse(req.uri.query); }
@@ -190,20 +237,6 @@ module.exports = function setup(path, options) {
           return next(err);
         }
         render("articleindex", {req: req, article: article}, sendToBrowser(req, res, next));
-      });
-    }),
-    Creationix.route("GET",  "/snippets/:snippetPath", function (req, res, params, next) {
-      Recorder(Path.join(path, "articles", params.snippetPath), function (err, output) {
-        if (err) {
-          if (err.code === "ENOENT") return next();
-          return next(err);
-        }
-        var body = JSON.stringify(output);
-        res.writeHead(200, {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(body)
-        });
-        res.end(body);
       });
     })
   );
@@ -418,7 +451,8 @@ module.exports = function setup(path, options) {
           linestart = lineend = parseInt(range, 10);
         }
       }
-      tree[i] = ["script", {src: "http://64.30.143.68/serve?" + QueryString.stringify({
+//      tree[i] = ["script", {src: "http://64.30.143.68/serve?" + QueryString.stringify({
+      tree[i] = ["script", {src: "/snippets?" + QueryString.stringify({
         repo: repo,
         file: file,
         linestart: linestart,
