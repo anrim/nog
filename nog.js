@@ -5,7 +5,7 @@ var Kernel = require('kernel');
 var Stack = require('stack');
 var Markdown = require('markdown').markdown;
 var Creationix = require('creationix');
-var Recorder = require('recorder');
+var Prettyfy = require('prettyfy').prettyPrintOne;
 var Url = require('url');
 var QueryString = require('querystring');
 var HTTPS = require('https');
@@ -21,6 +21,15 @@ module.exports = function setup(path, options) {
   var helpers = {
     render: render,
     query: query,
+    highlight: function (code, callback) {
+      var html;
+      try {
+        html = Prettyfy(code);
+      } catch (err) {
+        return callback(err);
+      }
+      callback(null, html);
+    },
     blockIf: function (condition, block, callback) {
       if (condition) block({}, callback);
       else callback(null, "");
@@ -84,12 +93,17 @@ module.exports = function setup(path, options) {
       try {
         var tree = Markdown.parse(input);
         dropCap(tree);
-        processSnippets(tree);
-        html = Markdown.toHTML(tree);
+        processSnippets(tree, function (err, placeholders) {
+          if (err) return callback(err);
+          html = Markdown.toHTML(tree);
+          Object.keys(placeholders).forEach(function (key) {
+            html = html.replace(key, placeholders[key]);
+          });
+          callback(null, html);
+        });
       } catch (err) {
         return callback(err);
       }
-      callback(null, html);
     },
     markdownTruncated: function (input, callback) {
       var html;
@@ -109,63 +123,6 @@ module.exports = function setup(path, options) {
 
   var middleware = Stack.compose(
     Creationix.static("/", resourceDir),
-    Creationix.route("GET",  "/snippets", function (req, res, params, next) {
-      if (!req.hasOwnProperty("uri")) { req.uri = Url.parse(req.url); }
-      if (!req.hasOwnProperty("query")) { req.query = QueryString.parse(req.uri.query); }
-      console.log("query", req.query);
-      var repo = Url.parse(req.query.repo);
-      var pathname = repo.pathname;
-      var path;
-      if (pathname.substr(pathname.length - 4) === ".git") {
-        pathname = pathname.substr(0, pathname.length - 4);
-      }
-      console.log("repo", repo);
-      switch (repo.hostname) {
-        case "github.com":
-          path = pathname + "/master/" + req.query.file;
-          break;
-        case "gist.github.com":
-          path = "/gist" + pathname + "/" + req.query.file;
-          break;
-        default:
-          next(new Error("Unknown git provider " + repo.hostname));
-          return;
-      }
-      HTTPS.get({
-        host: "raw.github.com",
-        headers: {Host: "raw.github.com"},
-        path: path
-      }, function (response) {
-        if (response.statusCode === 404) {
-          return next();
-        }
-        if (response.statusCode !== 200) {
-          return next(new Error("Problem getting code from github.\n" + path + "\n" + JSON.stringify(res.headers)));
-        }
-        response.setEncoding('utf8');
-        var data = "";
-        response.on('data', function (chunk) {
-          data += chunk;
-        });
-        response.on('end', function () {
-          // TODO: split and send text wrapped in script
-          var lines = data.split("\n");
-          var linestart = parseInt(req.query.linestart, 10) || 0;
-          var lineend = parseInt(req.query.lineend, 10) || 0;
-          if (lineend) lines.length = lineend;
-          if (linestart) lines = lines.slice(linestart - 1);
-          res.writeHead(200, {
-            "Content-Type": "application/javascript"
-          });
-          var code = lines.join("\n");
-          render("snippet", {code:JSON.stringify(code),url:JSON.stringify(req.url)}, function (err, html) {
-            if (err) return next(err);
-            res.end(html);
-          })
-        });
-      });
-
-    }),
     function (req, res, next) {
       if (!req.hasOwnProperty("uri")) { req.uri = Url.parse(req.url); }
       if (!req.hasOwnProperty("query")) { req.query = QueryString.parse(req.uri.query); }
@@ -439,7 +396,10 @@ module.exports = function setup(path, options) {
     });
   }
 
-  function processSnippets(tree) {
+  function processSnippets(tree, callback) {
+    var placeholders = {};
+    var z = 0;
+    var left = 0;
     tree.forEach(function (line, i) {
       if (!(Array.isArray(line) && line[0] === "code_block")) return;
       var code = line[1];
@@ -462,17 +422,35 @@ module.exports = function setup(path, options) {
           linestart = lineend = parseInt(range, 10);
         }
       }
-//      tree[i] = ["script", {src: "http://64.30.143.68/serve?" + QueryString.stringify({
-      tree[i] = ["script", {src: "/snippets?" + QueryString.stringify({
-        repo: repo,
-        file: file,
-        linestart: linestart,
-        lineend: lineend,
-        mode: "javascript",
-        theme: "dawn",
-        showlines: "false"
-      }), defer: "defer"}];
+      left++;
+      var query = {
+        repo: repo, file: file, linestart: linestart, lineend: lineend
+      };
+      loadSnippet(query, function (err, code) {
+        if (err) {
+          tree[i] = ["pre", ["code", err.stack]];
+          left--;
+          if (left === 0) {
+            callback(null, placeholders);
+          }
+          return;
+        }
+        render("snippet", {err:err,query:query,code:code}, function (err, html) {
+          if (err) {
+            tree[i] = ["pre", ["code", err.stack]];
+          } else {
+            var key = "{{{{" + (z++) + "}}}}";
+            placeholders[key] = html;
+            tree[i] = key;
+          }
+          left--;
+          if (left === 0) {
+            callback(null, placeholders);
+          }
+        });
+      });
     });
+    if (left === 0) callback();
   }
 
   // Sorts and filters articles based on query parameters
@@ -515,3 +493,45 @@ function truncate(tree) {
   tree.length = i;
 }
 
+function loadSnippet(query, callback) {
+  var repo = Url.parse(query.repo);
+  var pathname = repo.pathname;
+  var path;
+  if (pathname.substr(pathname.length - 4) === ".git") {
+    pathname = pathname.substr(0, pathname.length - 4);
+  }
+  switch (repo.hostname) {
+    case "github.com":
+      path = pathname + "/master/" + query.file;
+      break;
+    case "gist.github.com":
+      path = "/gist" + pathname + "/" + query.file;
+      break;
+    default:
+      callback(new Error("Unknown git provider " + repo.hostname));
+      return;
+  }
+  HTTPS.get({
+    host: "raw.github.com",
+    headers: {Host: "raw.github.com"},
+    path: path
+  }, function (response) {
+    if (response.statusCode !== 200) {
+      return callback(new Error("Problem getting code from github.\n" + path + "\n" + JSON.stringify(response.headers)));
+    }
+    response.setEncoding('utf8');
+    var data = "";
+    response.on('data', function (chunk) {
+      data += chunk;
+    });
+    response.on('error', callback);
+    response.on('end', function () {
+      var lines = data.split("\n");
+      var linestart = parseInt(query.linestart, 10) || 0;
+      var lineend = parseInt(query.lineend, 10) || 0;
+      if (lineend) lines.length = lineend;
+      if (linestart) lines = lines.slice(linestart - 1);
+      callback(null, Prettyfy(lines.join("\n")));
+    });
+  });
+}
