@@ -135,22 +135,33 @@ module.exports = function setup(path, options) {
         host: "raw.github.com",
         headers: {Host: "raw.github.com"},
         path: path
-      }, function (res) {
-        if (res.statusCode === 404) {
+      }, function (response) {
+        if (response.statusCode === 404) {
           return next();
         }
-        if (res.statusCode !== 200) {
+        if (response.statusCode !== 200) {
           return next(new Error("Problem getting code from github.\n" + path + "\n" + JSON.stringify(res.headers)));
         }
-        res.setEncoding('utf8');
+        response.setEncoding('utf8');
         var data = "";
-        res.on('data', function (chunk) {
+        response.on('data', function (chunk) {
           data += chunk;
         });
-        res.on('end', function () {
+        response.on('end', function () {
           // TODO: split and send text wrapped in script
-          console.log("data", data);
-          next();
+          var lines = data.split("\n");
+          var linestart = parseInt(req.query.linestart, 10) || 0;
+          var lineend = parseInt(req.query.lineend, 10) || 0;
+          if (lineend) lines.length = lineend;
+          if (linestart) lines = lines.slice(linestart - 1);
+          res.writeHead(200, {
+            "Content-Type": "application/javascript"
+          });
+          var code = lines.join("\n");
+          render("snippet", {code:JSON.stringify(code),url:JSON.stringify(req.url)}, function (err, html) {
+            if (err) return next(err);
+            res.end(html);
+          })
         });
       });
 
