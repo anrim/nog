@@ -9,6 +9,7 @@ var Prettyfy = require('prettyfy').prettyPrintOne;
 var Url = require('url');
 var QueryString = require('querystring');
 var HTTPS = require('https');
+var Wrap = require('./wrap');
 
 module.exports = function setup(path, options) {
   options = options || {};
@@ -493,6 +494,27 @@ function truncate(tree) {
   tree.length = i;
 }
 
+var getCode = Wrap(function getCode(path, callback) {
+  HTTPS.get({
+    host: "raw.github.com",
+    path: path
+  }, function (response) {
+    if (response.statusCode !== 200) {
+      return callback(new Error("Problem getting code from github.\n" + path + "\n" + JSON.stringify(response.headers)));
+    }
+    response.setEncoding('utf8');
+    var data = "";
+    response.on('data', function (chunk) {
+      data += chunk;
+    });
+    response.on('error', callback);
+    response.on('end', function () {
+      callback(null, data);
+    });
+  });
+});
+getCode.cacheLifetime = 1000 * 60;
+
 function loadSnippet(query, callback) {
   var repo = Url.parse(query.repo);
   var pathname = repo.pathname;
@@ -511,27 +533,12 @@ function loadSnippet(query, callback) {
       callback(new Error("Unknown git provider " + repo.hostname));
       return;
   }
-  HTTPS.get({
-    host: "raw.github.com",
-    headers: {Host: "raw.github.com"},
-    path: path
-  }, function (response) {
-    if (response.statusCode !== 200) {
-      return callback(new Error("Problem getting code from github.\n" + path + "\n" + JSON.stringify(response.headers)));
-    }
-    response.setEncoding('utf8');
-    var data = "";
-    response.on('data', function (chunk) {
-      data += chunk;
-    });
-    response.on('error', callback);
-    response.on('end', function () {
-      var lines = data.split("\n");
-      var linestart = parseInt(query.linestart, 10) || 0;
-      var lineend = parseInt(query.lineend, 10) || 0;
-      if (lineend) lines.length = lineend;
-      if (linestart) lines = lines.slice(linestart - 1);
-      callback(null, Prettyfy(lines.join("\n")));
-    });
+  getCode(path, function (err, data) {
+    var lines = data.split("\n");
+    var linestart = parseInt(query.linestart, 10) || 0;
+    var lineend = parseInt(query.lineend, 10) || 0;
+    if (lineend) lines.length = lineend;
+    if (linestart) lines = lines.slice(linestart - 1);
+    callback(null, Prettyfy(lines.join("\n")));
   });
 }
