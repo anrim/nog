@@ -97,9 +97,11 @@ module.exports = function setup(path, options) {
         processSnippets(tree, function (err, placeholders) {
           if (err) return callback(err);
           html = Markdown.toHTML(tree);
-          Object.keys(placeholders).forEach(function (key) {
-            html = html.replace(key, placeholders[key]);
-          });
+          if (placeholders) {
+            Object.keys(placeholders).forEach(function (key) {
+              html = html.replace(key, placeholders[key]);
+            });
+          }
           callback(null, html);
         });
       } catch (err) {
@@ -451,7 +453,7 @@ module.exports = function setup(path, options) {
         });
       });
     });
-    if (left === 0) callback();
+    if (left === 0) callback(null, placeholders);
   }
 
   // Sorts and filters articles based on query parameters
