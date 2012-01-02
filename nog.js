@@ -126,7 +126,7 @@ module.exports = function setup(path, options) {
 
   var middleware = Stack.compose(
     Creationix.static("/", resourceDir),
-    function (req, res, next) {
+    function settings(req, res, next) {
       if (!req.hasOwnProperty("uri")) { req.uri = Url.parse(req.url); }
       if (!req.hasOwnProperty("query")) { req.query = QueryString.parse(req.uri.query); }
       var settings;
@@ -171,7 +171,13 @@ module.exports = function setup(path, options) {
     Creationix.route("GET", "/", function (req, res, params, next) {
       query("index#articles", function (err, articles) {
         if (err) return next(err);
-        render("frontindex", {req: req, articles: filterArticles(articles, req)}, sendToBrowser(req, res, next));
+        renderToBrowser("frontindex.html", {articles: filterArticles(articles, req)}, req, res, next);
+      });
+    }),
+    Creationix.route("GET", "/feed.xml", function (req, res, params, next) {
+      query("index#articles", function (err, articles) {
+        if (err) return next(err);
+        renderToBrowser("rss.xml", {articles: filterArticles(articles, req)}, req, res, next);
       });
     }),
     Creationix.route("GET", "/tags/:tag", function (req, res, params, next) {
@@ -180,7 +186,16 @@ module.exports = function setup(path, options) {
           if (err.code === "ENOENT") return next();
           return next(err);
         }
-        render("frontindex", {req: req, query: req.query, articles: filterArticles(articles, req)}, sendToBrowser(req, res, next));
+        renderToBrowser("frontindex.html", {articles: filterArticles(articles, req)}, req, res, next);
+      });
+    }),
+    Creationix.route("GET", "/tags/:tag/feed.xml", function (req, res, params, next) {
+      query("index#tagsArticles." + params.tag, function (err, articles) {
+        if (err) {
+          if (err.code === "ENOENT") return next();
+          return next(err);
+        }
+        renderToBrowser("rss.xml", {articles: filterArticles(articles, req)}, req, res, next);
       });
     }),
     Creationix.route("GET", "/authors/:author", function (req, res, params, next) {
@@ -189,16 +204,16 @@ module.exports = function setup(path, options) {
           if (err.code === "ENOENT") return next();
           return next(err);
         }
-        render("frontindex", {req: req, articles: filterArticles(articles, req)}, sendToBrowser(req, res, next));
+        renderToBrowser("frontindex.html", {articles: filterArticles(articles, req)}, req, res, next);
       });
     }),
-    Creationix.route("GET", "/versions/:version", function (req, res, params, next) {
-      query("index#versionsArticles." + params.version, function (err, articles) {
+    Creationix.route("GET", "/authors/:author/feed.xml", function (req, res, params, next) {
+      query("index#authorsArticles.authors/" + params.author, function (err, articles) {
         if (err) {
           if (err.code === "ENOENT") return next();
           return next(err);
         }
-        render("frontindex", {req: req, articles: filterArticles(articles, req)}, sendToBrowser(req, res, next));
+        renderToBrowser("rss.xml", {articles: filterArticles(articles, req)}, req, res, next);
       });
     }),
     Creationix.route("GET",  "/:article", function (req, res, params, next) {
@@ -207,7 +222,7 @@ module.exports = function setup(path, options) {
           if (err.code === "ENOENT") return next();
           return next(err);
         }
-        render("articleindex", {req: req, article: article}, sendToBrowser(req, res, next));
+        renderToBrowser("articleindex.html", {article: article}, req, res, next);
       });
     })
   );
@@ -271,17 +286,6 @@ module.exports = function setup(path, options) {
     });
   }
 
-  function sendToBrowser(req, res, next) {
-    return function (err, html) {
-      if (err) return next(err);
-      res.writeHead(200, {
-        "Content-Length": Buffer.byteLength(html),
-        "Content-Type": "text/html; charset=utf-8"
-      });
-      res.end(html);
-    };
-  }
-
   // Query a field from the database
   function query(path, callback) {
     var i = path.indexOf("#");
@@ -341,9 +345,23 @@ module.exports = function setup(path, options) {
     });
   }
 
+  function renderToBrowser(name, data, req, res, next) {
+    data.req = req;
+    render(name, data, function (err, html) {
+      if (err) return next(err);
+      res.writeHead(200, {
+        "Content-Length": Buffer.byteLength(html),
+        "Content-Type": (name.substr(name.length - 4) === ".xml") ?
+          "application/rss+xml; charset=utf-8" :
+          "text/html; charset=utf-8"
+      });
+      res.end(html);
+    });
+  }
 
   // Main entry point for data rendering
   function render(name, data, callback) {
+    if (name.indexOf('.') < 0) { name += ".html"; }
     // Allow query data
     if (typeof data === "string") return query(data, function (err, data) {
       if (err) return callback(err);
@@ -359,7 +377,7 @@ module.exports = function setup(path, options) {
 
     // Compile and render a template
     data.__proto__ = helpers;
-    var path = Path.join(templateDir, name + ".html");
+    var path = Path.join(templateDir, name);
     Kernel(path, function (err, template) {
       if (err) return callback(err);
       template(data, function (err, result) {
