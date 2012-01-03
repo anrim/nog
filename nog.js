@@ -479,7 +479,13 @@ module.exports = function setup(path, options) {
           }
           return;
         }
-        render("snippet", {err:err,query:query,code:code}, function (err, html) {
+        var cloneUrl = "http://c9.io/open/git/?" + QueryString.stringify({
+          url: query.repo,
+          file: query.file,
+          line_start: linestart,
+          line_end: lineend
+        });
+        render("snippet", {err:err,cloneUrl:cloneUrl,query:query,code:code}, function (err, html) {
           if (err) {
             tree[i] = ["pre", ["code", err.stack]];
           } else {
