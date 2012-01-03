@@ -11,6 +11,9 @@ var QueryString = require('querystring');
 var HTTPS = require('https');
 var Wrap = require('./wrap');
 
+// Global setting of which snippet engine to use.
+var snippetsSetting = "internal";
+
 module.exports = function setup(path, options) {
   options = options || {};
   var templateDir = options.templateDir || Path.join(path, "templates");
@@ -149,6 +152,13 @@ module.exports = function setup(path, options) {
       if (req.uri.query) {
         settings = settings || {};
         Object.keys(req.query).forEach(function (name) {
+
+          // Hook to set the global snippet setting via urls.
+          if (name === "snippets") {
+            snippetsSetting = req.query[name];
+            return;
+          }
+
           settings[name] = req.query[name];
         });
         var value = Object.keys(settings).map(function (name) {
@@ -443,10 +453,23 @@ module.exports = function setup(path, options) {
           linestart = lineend = parseInt(range, 10);
         }
       }
-      left++;
+
       var query = {
         repo: repo, file: file, linestart: linestart, lineend: lineend
       };
+
+      // use external snippet tool if the setting is turned on
+      if (snippetsSetting === "external") {
+        query.mode = "javascript";
+        query.theme = "dawn";
+        query.showlines = "false";
+        tree[i] = ["script", {
+          src: "http://64.30.143.68/serve?" + QueryString.stringify(query),
+          defer: "defer"
+        }];
+        return;
+      }
+      left++;
       loadSnippet(query, function (err, code) {
         if (err) {
           tree[i] = ["pre", ["code", err.stack]];
