@@ -531,7 +531,9 @@ module.exports = function setup(path, options) {
 };
 
 function dropCap(tree) {
-  var line = tree[0] === "markdown" && Array.isArray(tree[1]) && tree[1][0] === "para" && tree[1][1];
+  var p = 1;
+  while (tree[p] && tree[p][0] !== "para") { p++ }
+  var line = tree[p] && tree[p][0] === "para" && tree[p][1];
   var i = line && line.indexOf(" ");
   if (!(line || line === 0)) {
     console.log("Warning, can't find first letter to drop caps", line);
@@ -539,8 +541,8 @@ function dropCap(tree) {
   }
   var word = line.substr(0, i);
   line = line.substr(i);
-  tree[1][1] = line;
-  tree[1].splice(1, 0, ["span", {"class": "drop-caps"}, word]);
+  tree[p][1] = line;
+  tree[p].splice(1, 0, ["span", {"class": "drop-caps"}, word]);
 }
 
 function truncate(tree) {
@@ -589,6 +591,7 @@ function loadSnippet(query, callback) {
       return;
   }
   getCode(path, function (err, data) {
+    if (err) return callback(err);
     var lines = data.split("\n");
     var linestart = parseInt(query.linestart, 10) || 0;
     var lineend = parseInt(query.lineend, 10) || 0;
