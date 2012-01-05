@@ -562,7 +562,6 @@ var getCode = Wrap(function getCode(path, callback) {
     });
   });
 });
-getCode.cacheLifetime = 1000 * 60;
 
 function loadSnippet(query, callback) {
   var repo = Url.parse(query.repo);

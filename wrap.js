@@ -2,12 +2,19 @@
 module.exports = function Wrap(fn) {
   var requestBatches = {};
   var requestCache = {};
-  wrapped.cacheLifetime = 1000;
+  var updatePending = {};
   function wrapped(key, callback) {
     if (requestCache.hasOwnProperty(key)) {
-      var value = requestCache[key];
-      process.nextTick(function () {
-        callback(null, value);
+      callback(null, requestCache[key]);
+      if (updatePending[key]) return;
+      updatePending[key] = true;
+      fn(key, function (err, result) {
+        delete updatePending[key];
+        if (err) {
+          console.log(err.stack);
+        } else {
+          requestCache[key] = result;
+        }
       });
       return;
     }
@@ -18,11 +25,8 @@ module.exports = function Wrap(fn) {
     var batch = requestBatches[key] = [callback];
     fn(key, onDone);
     function onDone(err, result) {
-      if (!err && wrapped.cacheLifetime) {
+      if (!err) {
         requestCache[key] = result;
-        setTimeout(function () {
-          delete requestCache[key];
-        }, wrapped.cacheLifetime);
       }
       delete requestBatches[key];
       for (var i = 0, l = batch.length; i < l; i++) {
