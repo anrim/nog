@@ -117,13 +117,19 @@ module.exports = function setup(path, options) {
         var tree = Markdown.parse(input);
         truncate(tree);
         dropCap(tree);
-        html = Markdown.toHTML(tree);
+        processSnippets(tree, function (err, placeholders) {
+          if (err) return callback(err);
+          html = Markdown.toHTML(tree);
+          if (placeholders) {
+            Object.keys(placeholders).forEach(function (key) {
+              html = html.replace(key, placeholders[key]);
+            });
+          }
+          callback(null, html);
+        });
       } catch (err) {
         return callback(err);
       }
-      process.nextTick(function () {
-        callback(null, html);
-      });
     }
   };
 
@@ -539,7 +545,8 @@ function dropCap(tree) {
 
 function truncate(tree) {
   var i = 1;
-  while (tree[i] && tree[i][0] !== "header") { i++; }
+  console.log(tree);
+  while (tree[i] && tree[i][0] !== "hr") { i++; }
   tree.length = i;
 }
 
