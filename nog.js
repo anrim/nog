@@ -11,9 +11,6 @@ var QueryString = require('querystring');
 var HTTPS = require('https');
 var Wrap = require('./wrap');
 
-// Global setting of which snippet engine to use.
-var snippetsSetting = "internal";
-
 module.exports = function setup(path, options) {
   options = options || {};
   var templateDir = options.templateDir || Path.join(path, "templates");
@@ -158,13 +155,6 @@ module.exports = function setup(path, options) {
       if (req.uri.query) {
         settings = settings || {};
         Object.keys(req.query).forEach(function (name) {
-
-          // Hook to set the global snippet setting via urls.
-          if (name === "snippets") {
-            snippetsSetting = req.query[name];
-            return;
-          }
-
           settings[name] = req.query[name];
         });
         var value = Object.keys(settings).map(function (name) {
@@ -460,51 +450,20 @@ module.exports = function setup(path, options) {
         }
       }
 
-      var query = {
-        repo: repo, file: file, linestart: linestart, lineend: lineend
-      };
 
-      // use external snippet tool if the setting is turned on
-      if (snippetsSetting === "external") {
-        query.mode = "javascript";
-        query.theme = "dawn";
-        query.showlines = "false";
-        tree[i] = ["script", {
-          src: "http://64.30.143.68/serve?" + QueryString.stringify(query),
-          defer: "defer"
-        }];
-        return;
+      var repo = Url.parse(repo);
+      var pathname = repo.pathname;
+      if (pathname.substr(pathname.length - 4) === ".git") {
+        pathname = pathname.substr(0, pathname.length - 4);
       }
-      left++;
-      loadSnippet(query, function (err, code) {
-        if (err) {
-          tree[i] = ["pre", ["code", err.stack]];
-          left--;
-          if (left === 0) {
-            callback(null, placeholders);
-          }
-          return;
-        }
-        var cloneUrl = "http://c9.io/open/git/?" + QueryString.stringify({
-          url: query.repo,
-          file: query.file,
-          line_start: linestart,
-          line_end: lineend
-        });
-        render("snippet", {err:err,cloneUrl:cloneUrl,query:query,code:code}, function (err, html) {
-          if (err) {
-            tree[i] = ["pre", ["code", err.stack]];
-          } else {
-            var key = "{{{{" + (z++) + "}}}}";
-            placeholders[key] = html;
-            tree[i] = key;
-          }
-          left--;
-          if (left === 0) {
-            callback(null, placeholders);
-          }
-        });
-      });
+      var url = "http://snippets.c9.io/" + repo.hostname + pathname + "/" + file;
+      var query = {
+        linestart: linestart, lineend: lineend
+      };
+      tree[i] = ["script", {
+        src: url + "?" + QueryString.stringify(query),
+        defer: "defer"
+      }];
     });
     if (left === 0) callback(null, placeholders);
   }
@@ -547,56 +506,6 @@ function dropCap(tree) {
 
 function truncate(tree) {
   var i = 1;
-  console.log(tree);
   while (tree[i] && tree[i][0] !== "hr") { i++; }
   tree.length = i;
-}
-
-var getCode = Wrap(function getCode(path, callback) {
-  HTTPS.get({
-    host: "raw.github.com",
-    path: path
-  }, function (response) {
-    if (response.statusCode !== 200) {
-      return callback(new Error("Problem getting code from github.\n" + path + "\n" + JSON.stringify(response.headers)));
-    }
-    response.setEncoding('utf8');
-    var data = "";
-    response.on('data', function (chunk) {
-      data += chunk;
-    });
-    response.on('error', callback);
-    response.on('end', function () {
-      callback(null, data);
-    });
-  });
-});
-
-function loadSnippet(query, callback) {
-  var repo = Url.parse(query.repo);
-  var pathname = repo.pathname;
-  var path;
-  if (pathname.substr(pathname.length - 4) === ".git") {
-    pathname = pathname.substr(0, pathname.length - 4);
-  }
-  switch (repo.hostname) {
-    case "github.com":
-      path = pathname + "/master/" + query.file;
-      break;
-    case "gist.github.com":
-      path = "/gist" + pathname + "/" + query.file;
-      break;
-    default:
-      callback(new Error("Unknown git provider " + repo.hostname));
-      return;
-  }
-  getCode(path, function (err, data) {
-    if (err) return callback(err);
-    var lines = data.split("\n");
-    var linestart = parseInt(query.linestart, 10) || 0;
-    var lineend = parseInt(query.lineend, 10) || 0;
-    if (lineend) lines.length = lineend;
-    if (linestart) lines = lines.slice(linestart - 1);
-    callback(null, Prettyfy(lines.join("\n")));
-  });
 }
